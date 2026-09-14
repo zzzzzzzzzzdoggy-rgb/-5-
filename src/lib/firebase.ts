@@ -15,6 +15,7 @@ import {
 } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
 import { Product, Order } from '../types';
+import { INITIAL_PRODUCTS } from '../data/products';
 
 // Initialize Firebase App
 const app = initializeApp(firebaseConfig);
@@ -213,27 +214,37 @@ const DEFAULT_PRODUCTS: Product[] = [
   },
 ];
 
-// Seed initial products into Firestore if not exists
+// Seed initial products into Firestore if not exists (ensuring all sets exist)
 export async function seedFirestoreIfEmpty(): Promise<Product[]> {
   const collectionPath = 'products';
   try {
     const snap = await getDocs(collection(db, collectionPath));
-    if (snap.empty) {
-      console.log('[Firebase] Seeding initial products into Firestore...');
-      for (const prod of DEFAULT_PRODUCTS) {
+    const existingMap = new Map<string, Product>();
+    snap.forEach((d) => {
+      existingMap.set(d.id, d.data() as Product);
+    });
+
+    // Make sure all 3 sets exist in Firestore!
+    for (const prod of INITIAL_PRODUCTS) {
+      if (!existingMap.has(prod.id)) {
+        console.log(`[Firebase] Seeding missing product ${prod.id} (${prod.name}) into Firestore...`);
         await setDoc(doc(db, collectionPath, prod.id), sanitizeForFirestore(prod));
+        existingMap.set(prod.id, prod);
       }
-      return DEFAULT_PRODUCTS;
-    } else {
-      const prods: Product[] = [];
-      snap.forEach((d) => {
-        prods.push(d.data() as Product);
-      });
-      return prods;
     }
+
+    const prods = Array.from(existingMap.values());
+    const order = ['set-1', 'set-2', 'set-3'];
+    prods.sort((a, b) => {
+      const idxA = order.indexOf(a.id);
+      const idxB = order.indexOf(b.id);
+      if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+      return a.name.localeCompare(b.name);
+    });
+    return prods;
   } catch (err) {
     handleFirestoreError(err, OperationType.LIST, collectionPath);
-    return DEFAULT_PRODUCTS;
+    return INITIAL_PRODUCTS;
   }
 }
 
@@ -258,11 +269,17 @@ export function subscribeToProducts(
   return onSnapshot(
     collection(db, path),
     (snap) => {
-      const items: Product[] = [];
+      // Start with INITIAL_PRODUCTS as base so sets are never lost if partial
+      const map = new Map<string, Product>();
+      INITIAL_PRODUCTS.forEach((p) => map.set(p.id, p));
+
       snap.forEach((docSnap) => {
-        items.push(docSnap.data() as Product);
+        const live = docSnap.data() as Product;
+        const current = map.get(live.id) || live;
+        map.set(live.id, { ...current, ...live });
       });
-      // Sort by predetermined order or set-1, set-2, set-3
+
+      const items = Array.from(map.values());
       const order = ['set-1', 'set-2', 'set-3'];
       items.sort((a, b) => {
         const idxA = order.indexOf(a.id);

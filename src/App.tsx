@@ -98,19 +98,28 @@ export default function App() {
       if (!res.ok) return;
       const data = await res.json();
       if (data.success && Array.isArray(data.products)) {
-        setProducts((prev) =>
-          prev.map((p) => {
-            const serverProd = data.products.find((sp: any) => sp.id === p.id);
-            if (!serverProd) return p;
-            return {
-              ...p,
-              stock: serverProd.stock,
-              price: serverProd.price ?? p.price,
-              originalPrice: serverProd.originalPrice ?? p.originalPrice,
-              remainingAlert: serverProd.remainingAlert ?? p.remainingAlert,
-            };
-          })
-        );
+        setProducts((prev) => {
+          const map = new Map<string, Product>();
+          INITIAL_PRODUCTS.forEach((p) => map.set(p.id, p));
+          prev.forEach((p) => map.set(p.id, p));
+          data.products.forEach((sp: Product) => {
+            const cur = map.get(sp.id) || sp;
+            map.set(sp.id, {
+              ...cur,
+              stock: sp.stock,
+              price: sp.price ?? cur.price,
+              originalPrice: sp.originalPrice ?? cur.originalPrice,
+              remainingAlert: sp.remainingAlert ?? cur.remainingAlert,
+            });
+          });
+          const order = ['set-1', 'set-2', 'set-3'];
+          return Array.from(map.values()).sort((a, b) => {
+            const idxA = order.indexOf(a.id);
+            const idxB = order.indexOf(b.id);
+            if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+            return a.name.localeCompare(b.name);
+          });
+        });
       }
     } catch (err) {
       // Offline fallback: keep current state
