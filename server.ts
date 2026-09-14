@@ -18,6 +18,18 @@ interface ProductData {
   longDescription: string;
   image: string;
   galleryImages: string[];
+  specs?: {
+    scientificName?: string;
+    thaiName?: string;
+    origin?: string;
+    size?: string;
+    hornCount?: number;
+    lifespan?: string;
+    diet?: string;
+    temperature?: string;
+    humidity?: string;
+  };
+  inBoxIncludes?: string[];
 }
 
 interface OrderData {
@@ -49,6 +61,11 @@ interface OrderData {
 const DATA_DIR = path.join(process.cwd(), "data");
 if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
+}
+
+const UPLOADS_DIR = path.join(process.cwd(), "public", "uploads");
+if (!fs.existsSync(UPLOADS_DIR)) {
+  fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 }
 
 const STOCK_FILE = path.join(DATA_DIR, "stock.json");
@@ -155,9 +172,42 @@ async function startServer() {
   app.use(express.json({ limit: "20mb" }));
   app.use(express.urlencoded({ extended: true, limit: "20mb" }));
 
+  // Static uploads directory
+  app.use("/uploads", express.static(UPLOADS_DIR));
+
   // API Routes
   app.get("/api/health", (_req, res) => {
     res.json({ status: "ok", timestamp: new Date().toISOString() });
+  });
+
+  // Upload image endpoint (supports base64 and returns public accessible URL)
+  app.post("/api/upload-image", (req, res) => {
+    try {
+      const { image, name } = req.body;
+      if (!image) {
+        return res.status(400).json({ success: false, message: "กรุณาเลือกไฟล์ภาพ" });
+      }
+
+      // Check if it's base64 data
+      const matches = image.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+      if (matches && matches.length === 3) {
+        const mimeType = matches[1];
+        const ext = mimeType.split("/")[1] || "jpg";
+        const cleanExt = ext === "jpeg" ? "jpg" : ext.replace(/[^a-zA-Z0-9]/g, "");
+        const buffer = Buffer.from(matches[2], "base64");
+        const safeName = (name || "beetle").replace(/[^a-zA-Z0-9_-]/g, "_");
+        const filename = `${safeName}-${Date.now()}-${Math.floor(Math.random() * 10000)}.${cleanExt}`;
+        const filepath = path.join(UPLOADS_DIR, filename);
+        fs.writeFileSync(filepath, buffer);
+        return res.json({ success: true, url: `/uploads/${filename}` });
+      }
+
+      // If it's already an HTTP URL or local path
+      return res.json({ success: true, url: image });
+    } catch (err: any) {
+      console.error("Upload error:", err);
+      res.status(500).json({ success: false, message: err.message || "อัปโหลดภาพไม่สำเร็จ" });
+    }
   });
 
   // Get products with real-time stock
@@ -174,9 +224,25 @@ async function startServer() {
     res.json({ success: true, stock: stockMap, lastUpdated: new Date().toISOString() });
   });
 
-  // Admin update product stock or details
+  // Admin update product stock, gallery images, details
   app.post("/api/products/update", (req, res) => {
-    const { id, stock, price, originalPrice, name, description, image } = req.body;
+    const {
+      id,
+      stock,
+      price,
+      originalPrice,
+      name,
+      subname,
+      badge,
+      isBestSeller,
+      description,
+      longDescription,
+      image,
+      galleryImages,
+      specs,
+      inBoxIncludes,
+    } = req.body;
+
     const index = products.findIndex((p) => p.id === id);
     if (index === -1) {
       return res.status(404).json({ success: false, message: "Product not found" });
@@ -186,8 +252,19 @@ async function startServer() {
     if (price !== undefined) products[index].price = parseFloat(price);
     if (originalPrice !== undefined) products[index].originalPrice = parseFloat(originalPrice);
     if (name !== undefined) products[index].name = name;
+    if (subname !== undefined) products[index].subname = subname;
+    if (badge !== undefined) products[index].badge = badge;
+    if (isBestSeller !== undefined) products[index].isBestSeller = Boolean(isBestSeller);
     if (description !== undefined) products[index].description = description;
+    if (longDescription !== undefined) products[index].longDescription = longDescription;
     if (image !== undefined) products[index].image = image;
+    if (galleryImages !== undefined && Array.isArray(galleryImages)) {
+      products[index].galleryImages = galleryImages;
+    }
+    if (specs !== undefined) products[index].specs = { ...products[index].specs, ...specs };
+    if (inBoxIncludes !== undefined && Array.isArray(inBoxIncludes)) {
+      products[index].inBoxIncludes = inBoxIncludes;
+    }
 
     if (products[index].stock <= 2 && products[index].stock > 0) {
       products[index].remainingAlert = `Only ${products[index].stock} Left`;

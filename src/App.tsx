@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Product, CartItem, Coupon, Order } from './types';
 import { INITIAL_PRODUCTS } from './data/products';
+import { testFirestoreConnection, seedFirestoreIfEmpty, subscribeToProducts } from './lib/firebase';
 import { Navbar } from './components/Navbar';
 import { HeroSection } from './components/HeroSection';
 import { TrustBar } from './components/TrustBar';
@@ -34,9 +35,11 @@ export default function App() {
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [isAdminOpen, setIsAdminOpen] = useState(false);
+  const [adminInitialProductId, setAdminInitialProductId] = useState<string | undefined>(undefined);
   const [isShareOpen, setIsShareOpen] = useState(false);
   const [galleryProduct, setGalleryProduct] = useState<Product | null>(null);
   const [detailsProduct, setDetailsProduct] = useState<Product | null>(null);
+  const [isFirebaseConnected, setIsFirebaseConnected] = useState(false);
 
   // Toast state
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -59,7 +62,36 @@ export default function App() {
     }
   }, [cart]);
 
-  // Fetch real-time products & stock from Server
+  // Firebase Firestore Connection & Real-time Synchronization
+  useEffect(() => {
+    let unsubscribe: (() => void) | undefined;
+    async function initFirebase() {
+      try {
+        const isOnline = await testFirestoreConnection();
+        setIsFirebaseConnected(isOnline);
+        if (isOnline) {
+          // Seed Firestore if empty or retrieve cloud catalog
+          await seedFirestoreIfEmpty();
+
+          // Listen to real-time changes directly from Firestore
+          unsubscribe = subscribeToProducts((liveProducts) => {
+            if (liveProducts && liveProducts.length > 0) {
+              setProducts(liveProducts);
+            }
+          });
+        }
+      } catch (err) {
+        console.warn('[Firebase] Initialization notice:', err);
+      }
+    }
+
+    initFirebase();
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
+  }, []);
+
+  // Fetch real-time products & stock from Server fallback
   const fetchServerProducts = useCallback(async () => {
     try {
       const res = await fetch('/api/products');
@@ -188,6 +220,7 @@ export default function App() {
         isAdmin={isAdminOpen}
         onToggleAdmin={() => setIsAdminOpen(!isAdminOpen)}
         onOpenShare={() => setIsShareOpen(true)}
+        isFirebaseConnected={isFirebaseConnected}
       />
 
       {/* Hero Section (Cinematic Full-Screen 100% based on reference) */}
@@ -229,6 +262,10 @@ export default function App() {
                 onAddToCart={handleAddToCart}
                 onOpenGallery={(p) => setGalleryProduct(p)}
                 onOpenDetails={(p) => setDetailsProduct(p)}
+                onEditProduct={(p) => {
+                  setAdminInitialProductId(p.id);
+                  setIsAdminOpen(true);
+                }}
               />
             ))}
           </div>
@@ -302,9 +339,13 @@ export default function App() {
 
       <AdminModal
         isOpen={isAdminOpen}
-        onClose={() => setIsAdminOpen(false)}
+        onClose={() => {
+          setIsAdminOpen(false);
+          setAdminInitialProductId(undefined);
+        }}
         products={products}
         onRefreshProducts={fetchServerProducts}
+        initialProductId={adminInitialProductId}
       />
 
       <ShareModal

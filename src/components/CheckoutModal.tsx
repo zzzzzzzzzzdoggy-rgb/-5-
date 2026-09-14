@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { CartItem, Coupon, Order } from '../types';
 import { X, QrCode, CreditCard, Upload, CheckCircle2, ShieldCheck, Clock, ArrowRight, Loader2, Copy } from 'lucide-react';
 import { CONTACT_INFO } from '../data/products';
+import { saveOrderToFirestore, updateProductInFirestore } from '../lib/firebase';
 
 interface CheckoutModalProps {
   isOpen: boolean;
@@ -139,6 +140,22 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
       const data = await res.json();
       if (!res.ok || !data.success) {
         throw new Error(data.message || 'เกิดข้อผิดพลาดในการสั่งซื้อ');
+      }
+
+      // Sync with Firebase Cloud Firestore
+      try {
+        if (data.order) {
+          await saveOrderToFirestore(data.order);
+        }
+        for (const it of cart) {
+          const newStock = Math.max(0, it.product.stock - it.quantity);
+          await updateProductInFirestore({
+            ...it.product,
+            stock: newStock,
+          });
+        }
+      } catch (fErr) {
+        console.warn('[Firebase] Firestore order sync:', fErr);
       }
 
       setCreatedOrder(data.order);

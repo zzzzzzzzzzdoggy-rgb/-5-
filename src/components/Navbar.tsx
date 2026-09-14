@@ -1,5 +1,5 @@
 import React from 'react';
-import { ShoppingBag, Share2, Shield, Phone, Sparkles } from 'lucide-react';
+import { ShoppingBag, Share2, Settings, Phone, Sparkles } from 'lucide-react';
 
 interface NavbarProps {
   cartCount: number;
@@ -7,6 +7,7 @@ interface NavbarProps {
   isAdmin: boolean;
   onToggleAdmin: () => void;
   onOpenShare: () => void;
+  isFirebaseConnected?: boolean;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -15,6 +16,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   isAdmin,
   onToggleAdmin,
   onOpenShare,
+  isFirebaseConnected = false,
 }) => {
   return (
     <nav
@@ -51,36 +53,48 @@ export const Navbar: React.FC<NavbarProps> = ({
 
         {/* Actions */}
         <div className="flex items-center gap-2 sm:gap-3">
+          {/* Firebase Cloud Live Badge */}
+          {isFirebaseConnected && (
+            <div
+              className="hidden lg:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/25 text-[11px] font-mono text-emerald-400"
+              title="เชื่อมต่อฐานข้อมูล Google Cloud Firestore เรียบร้อยแล้ว (Real-time Sync)"
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_#34d399] animate-pulse"></span>
+              <span>Firebase Cloud</span>
+            </div>
+          )}
+
           {/* Share Button (For sharing with customers) */}
           <button
             id="nav-share-btn"
             onClick={onOpenShare}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-zinc-800 text-zinc-300 hover:text-white hover:border-zinc-600 bg-zinc-900/60 text-xs font-medium transition-all"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-zinc-800 text-zinc-300 hover:text-white hover:border-zinc-600 bg-zinc-900/60 text-xs font-medium transition-all cursor-pointer"
             title="แชร์เว็บบอร์ดให้ลูกค้าดู"
           >
             <Share2 className="w-3.5 h-3.5 text-emerald-400" />
             <span className="hidden sm:inline">แชร์เว็บ</span>
           </button>
 
-          {/* Admin Toggle */}
+          {/* Admin / Settings Toggle */}
           <button
             id="nav-admin-btn"
             onClick={onToggleAdmin}
-            className={`text-xs font-medium px-3.5 py-1.5 rounded-full border transition-all flex items-center gap-1.5 ${
+            className={`text-xs font-medium px-3.5 py-1.5 rounded-full border transition-all flex items-center gap-1.5 cursor-pointer ${
               isAdmin
                 ? 'border-emerald-500/80 bg-emerald-500/15 text-emerald-300 shadow-[0_0_15px_rgba(0,185,0,0.2)]'
-                : 'border-zinc-800 text-zinc-400 hover:text-zinc-200 hover:border-zinc-700 bg-zinc-900/40'
+                : 'border-zinc-700 text-zinc-200 hover:text-white hover:border-emerald-500/50 bg-zinc-900/80'
             }`}
+            title="ตั้งค่า แก้ไขข้อมูลสินค้า เพิ่มรูป ลบรูป และจัดการสต็อก"
           >
-            <Shield className="w-3 h-3" />
-            <span>{isAdmin ? 'โหมดจัดการสต็อก' : 'Admin'}</span>
+            <Settings className={`w-3.5 h-3.5 ${isAdmin ? 'text-emerald-400 animate-spin' : 'text-zinc-400'}`} />
+            <span>{isAdmin ? 'ปิดโหมดตั้งค่า' : 'ตั้งค่า & จัดการรูป'}</span>
           </button>
 
           {/* Cart Icon */}
           <button
             id="nav-cart-btn"
             onClick={onOpenCart}
-            className="relative p-2.5 rounded-full bg-zinc-900/80 hover:bg-zinc-800 border border-zinc-800 text-zinc-200 hover:text-white transition-all group"
+            className="relative p-2.5 rounded-full bg-zinc-900/80 hover:bg-zinc-800 border border-zinc-800 text-zinc-200 hover:text-white transition-all group cursor-pointer"
             aria-label="ตะกร้าสินค้า"
           >
             <ShoppingBag className="w-5 h-5 text-zinc-300 group-hover:text-emerald-400 transition-colors" />

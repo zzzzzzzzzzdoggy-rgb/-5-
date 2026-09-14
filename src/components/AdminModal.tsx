@@ -1,12 +1,39 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Product, Order } from '../types';
-import { X, RefreshCw, Save, CheckCircle, Package, Users, DollarSign, Database, AlertTriangle } from 'lucide-react';
+import {
+  updateProductInFirestore,
+  subscribeToOrders,
+  updateOrderStatusInFirestore,
+} from '../lib/firebase';
+import {
+  X,
+  RefreshCw,
+  Save,
+  CheckCircle,
+  Package,
+  Users,
+  Database,
+  Upload,
+  Trash2,
+  Star,
+  Image as ImageIcon,
+  Plus,
+  ArrowLeft,
+  ArrowRight,
+  Sparkles,
+  Check,
+  AlertCircle,
+  ExternalLink,
+  Layers,
+  ZoomIn,
+} from 'lucide-react';
 
 interface AdminModalProps {
   isOpen: boolean;
   onClose: () => void;
   products: Product[];
   onRefreshProducts: () => void;
+  initialProductId?: string;
 }
 
 export const AdminModal: React.FC<AdminModalProps> = ({
@@ -14,27 +41,76 @@ export const AdminModal: React.FC<AdminModalProps> = ({
   onClose,
   products,
   onRefreshProducts,
+  initialProductId,
 }) => {
-  const [activeTab, setActiveTab] = useState<'stock' | 'orders'>('stock');
-  const [stockEdits, setStockEdits] = useState<Record<string, { stock: number; price: number; originalPrice: number }>>({});
+  const [activeTab, setActiveTab] = useState<'media' | 'stock' | 'orders'>('media');
+  const [selectedProductId, setSelectedProductId] = useState<string>('');
+
+  // Selected product edit state
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [newImageUrl, setNewImageUrl] = useState('');
+  const [newInBoxItem, setNewInBoxItem] = useState('');
+  const [isUploading, setIsUploading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [saveMessage, setSaveMessage] = useState('');
+  const [notification, setNotification] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
+
+  // Preview zoomed image
+  const [previewZoomImage, setPreviewZoomImage] = useState<string | null>(null);
+
+  // Quick stock edits
+  const [stockEdits, setStockEdits] = useState<Record<string, { stock: number; price: number; originalPrice: number }>>({});
+
+  // Orders
   const [orders, setOrders] = useState<Order[]>([]);
   const [isLoadingOrders, setIsLoadingOrders] = useState(false);
 
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Initialize selected product and stock edits
   useEffect(() => {
-    if (!isOpen) return;
-    const initial: Record<string, { stock: number; price: number; originalPrice: number }> = {};
+    if (!isOpen || products.length === 0) return;
+
+    const targetId = initialProductId && products.some((p) => p.id === initialProductId)
+      ? initialProductId
+      : (selectedProductId && products.some((p) => p.id === selectedProductId))
+      ? selectedProductId
+      : products[0].id;
+
+    setSelectedProductId(targetId);
+    const prod = products.find((p) => p.id === targetId) || products[0];
+    setEditingProduct(JSON.parse(JSON.stringify(prod)));
+
+    const initialStock: Record<string, { stock: number; price: number; originalPrice: number }> = {};
     products.forEach((p) => {
-      initial[p.id] = {
+      initialStock[p.id] = {
         stock: p.stock,
         price: p.price,
         originalPrice: p.originalPrice,
       };
     });
-    setStockEdits(initial);
+    setStockEdits(initialStock);
+
     loadOrders();
-  }, [isOpen, products]);
+  }, [isOpen, initialProductId, products]);
+
+  // Real-time Firestore orders subscription
+  useEffect(() => {
+    if (!isOpen) return;
+    let unsub: (() => void) | undefined;
+    try {
+      unsub = subscribeToOrders((liveOrders) => {
+        if (liveOrders && liveOrders.length > 0) {
+          setOrders(liveOrders);
+          setIsLoadingOrders(false);
+        }
+      });
+    } catch (e) {
+      console.warn('[Firebase] Orders subscription fallback:', e);
+    }
+    return () => {
+      if (unsub) unsub();
+    };
+  }, [isOpen]);
 
   const loadOrders = async () => {
     setIsLoadingOrders(true);
@@ -51,9 +127,193 @@ export const AdminModal: React.FC<AdminModalProps> = ({
     }
   };
 
-  if (!isOpen) return null;
+  const showNotify = (msg: string, type: 'success' | 'error' = 'success') => {
+    setNotification({ msg, type });
+    setTimeout(() => setNotification(null), 3500);
+  };
 
-  const handleStockChange = (id: string, field: 'stock' | 'price' | 'originalPrice', value: number) => {
+  const handleSelectProduct = (id: string) => {
+    setSelectedProductId(id);
+    const prod = products.find((p) => p.id === id);
+    if (prod) {
+      setEditingProduct(JSON.parse(JSON.stringify(prod)));
+    }
+  };
+
+  // --- Professional Image Management Handlers ---
+
+  // Upload file via base64 to server /api/upload-image
+  const handleFileUpload = async (files: FileList | null) => {
+    if (!files || files.length === 0 || !editingProduct) return;
+    setIsUploading(true);
+
+    try {
+      const uploadedUrls: string[] = [];
+
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const reader = new FileReader();
+
+        const base64Data = await new Promise<string>((resolve, reject) => {
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        });
+
+        // Post to server endpoint
+        const res = await fetch('/api/upload-image', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            image: base64Data,
+            name: `${editingProduct.id}-img`,
+          }),
+        });
+
+        const data = await res.json();
+        if (data.success && data.url) {
+          uploadedUrls.push(data.url);
+        } else {
+          uploadedUrls.push(base64Data);
+        }
+      }
+
+      // Add to galleryImages
+      const updatedGallery = [...(editingProduct.galleryImages || []), ...uploadedUrls];
+      // If no main image exists, set first uploaded as cover
+      const updatedCover = editingProduct.image || uploadedUrls[0];
+
+      setEditingProduct({
+        ...editingProduct,
+        image: updatedCover,
+        galleryImages: updatedGallery,
+      });
+
+      showNotify(`อัปโหลดรูปภาพสำเร็จ ${uploadedUrls.length} รูป!`);
+    } catch (err) {
+      console.error(err);
+      showNotify('เกิดข้อผิดพลาดในการอัปโหลดภาพ', 'error');
+    } finally {
+      setIsUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  // Add photo via direct URL
+  const handleAddImageUrl = () => {
+    if (!newImageUrl.trim() || !editingProduct) return;
+    const url = newImageUrl.trim();
+    const updatedGallery = [...(editingProduct.galleryImages || []), url];
+    setEditingProduct({
+      ...editingProduct,
+      image: editingProduct.image || url,
+      galleryImages: updatedGallery,
+    });
+    setNewImageUrl('');
+    showNotify('เพิ่มรูปภาพจากลิงก์เรียบร้อยแล้ว');
+  };
+
+  // Delete an image from gallery
+  const handleDeleteImage = (indexToDelete: number) => {
+    if (!editingProduct) return;
+    const targetUrl = editingProduct.galleryImages[indexToDelete];
+    const updatedGallery = editingProduct.galleryImages.filter((_, idx) => idx !== indexToDelete);
+
+    // If deleting the cover image, pick the first remaining or default
+    let newCover = editingProduct.image;
+    if (editingProduct.image === targetUrl) {
+      newCover = updatedGallery.length > 0 ? updatedGallery[0] : '/images/hero.jpg';
+    }
+
+    setEditingProduct({
+      ...editingProduct,
+      image: newCover,
+      galleryImages: updatedGallery,
+    });
+    showNotify('ลบรูปภาพออกจากแกลเลอรีแล้ว');
+  };
+
+  // Set image as main cover
+  const handleSetAsCover = (imageUrl: string) => {
+    if (!editingProduct) return;
+    setEditingProduct({
+      ...editingProduct,
+      image: imageUrl,
+    });
+    showNotify('ตั้งเป็นภาพหน้าปกสินค้าเรียบร้อยแล้ว');
+  };
+
+  // Move image left in gallery order
+  const handleMoveImage = (fromIndex: number, direction: 'left' | 'right') => {
+    if (!editingProduct) return;
+    const gallery = [...editingProduct.galleryImages];
+    const toIndex = direction === 'left' ? fromIndex - 1 : fromIndex + 1;
+    if (toIndex < 0 || toIndex >= gallery.length) return;
+
+    const temp = gallery[fromIndex];
+    gallery[fromIndex] = gallery[toIndex];
+    gallery[toIndex] = temp;
+
+    setEditingProduct({
+      ...editingProduct,
+      galleryImages: gallery,
+    });
+  };
+
+  // In-Box items management
+  const handleAddInBoxItem = () => {
+    if (!newInBoxItem.trim() || !editingProduct) return;
+    setEditingProduct({
+      ...editingProduct,
+      inBoxIncludes: [...(editingProduct.inBoxIncludes || []), newInBoxItem.trim()],
+    });
+    setNewInBoxItem('');
+  };
+
+  const handleRemoveInBoxItem = (index: number) => {
+    if (!editingProduct) return;
+    setEditingProduct({
+      ...editingProduct,
+      inBoxIncludes: editingProduct.inBoxIncludes.filter((_, i) => i !== index),
+    });
+  };
+
+  // Save all changes for the selected product to Backend & Cloud Firestore
+  const handleSaveProductChanges = async () => {
+    if (!editingProduct) return;
+    setIsSaving(true);
+
+    try {
+      // Sync to Cloud Firestore
+      try {
+        await updateProductInFirestore(editingProduct);
+      } catch (fErr) {
+        console.warn('[Firebase] Firestore product update warning:', fErr);
+      }
+
+      const res = await fetch('/api/products/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(editingProduct),
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        showNotify(`บันทึกข้อมูลและรูปภาพของ "${editingProduct.name}" ลง Firebase & Server สำเร็จ!`);
+        onRefreshProducts();
+      } else {
+        showNotify(data.message || 'บันทึกไม่สำเร็จ', 'error');
+      }
+    } catch (err) {
+      console.error(err);
+      showNotify('เกิดข้อผิดพลาดในการเชื่อมต่อเซิร์ฟเวอร์', 'error');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Quick stock changes
+  const handleQuickStockChange = (id: string, field: 'stock' | 'price' | 'originalPrice', value: number) => {
     setStockEdits((prev) => ({
       ...prev,
       [id]: {
@@ -63,11 +323,24 @@ export const AdminModal: React.FC<AdminModalProps> = ({
     }));
   };
 
-  const handleSaveStock = async (id: string) => {
+  const handleSaveQuickStock = async (id: string) => {
     setIsSaving(true);
-    setSaveMessage('');
     try {
       const edit = stockEdits[id];
+      const currentProd = products.find((p) => p.id === id);
+      if (currentProd) {
+        try {
+          await updateProductInFirestore({
+            ...currentProd,
+            stock: edit.stock,
+            price: edit.price,
+            originalPrice: edit.originalPrice,
+          });
+        } catch (fErr) {
+          console.warn('[Firebase] Quick stock Firestore sync warning:', fErr);
+        }
+      }
+
       const res = await fetch('/api/products/update', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -80,34 +353,24 @@ export const AdminModal: React.FC<AdminModalProps> = ({
       });
       const data = await res.json();
       if (data.success) {
-        setSaveMessage('อัปเดตสต็อกลงฐานข้อมูลเรียลไทม์สำเร็จ');
+        showNotify('อัปเดตสต็อกลง Firebase & ฐานข้อมูลเรียลไทม์สำเร็จ');
         onRefreshProducts();
-        setTimeout(() => setSaveMessage(''), 3000);
       }
     } catch (err) {
-      setSaveMessage('เกิดข้อผิดพลาดในการบันทึกข้อมูล');
+      showNotify('เกิดข้อผิดพลาดในการบันทึก', 'error');
     } finally {
       setIsSaving(false);
     }
   };
 
-  const handleResetStock = async () => {
-    if (!confirm('ยืนยันรีเซ็ตสต็อกทั้งหมดเป็นค่าเริ่มต้นโรงงาน?')) return;
-    try {
-      const res = await fetch('/api/admin/reset-stock', { method: 'POST' });
-      const data = await res.json();
-      if (data.success) {
-        onRefreshProducts();
-        setSaveMessage('รีเซ็ตสต็อกสำเร็จ');
-        setTimeout(() => setSaveMessage(''), 3000);
-      }
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
   const handleUpdateOrderStatus = async (orderId: string, status: Order['status']) => {
     try {
+      try {
+        await updateOrderStatusInFirestore(orderId, status);
+      } catch (fErr) {
+        console.warn('[Firebase] Order status Firestore sync warning:', fErr);
+      }
+
       const res = await fetch(`/api/orders/${orderId}/status`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -118,81 +381,471 @@ export const AdminModal: React.FC<AdminModalProps> = ({
         setOrders((prev) =>
           prev.map((o) => (o.id === orderId ? { ...o, status } : o))
         );
+        showNotify(`อัปเดตสถานะออเดอร์ ${orderId} ลง Cloud Firestore แล้ว`);
       }
     } catch (err) {
       console.error(err);
     }
   };
 
+  if (!isOpen) return null;
+
   return (
     <div
       id="admin-modal"
-      className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto animate-in fade-in"
+      className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-6 overflow-y-auto animate-in fade-in"
     >
-      <div className="bg-zinc-950 border border-zinc-800 rounded-3xl max-w-3xl w-full p-6 sm:p-8 relative shadow-2xl my-8 max-h-[92vh] overflow-y-auto">
+      <div className="bg-zinc-950 border border-zinc-800 rounded-3xl max-w-4xl w-full p-6 sm:p-8 relative shadow-2xl my-6 max-h-[94vh] overflow-y-auto flex flex-col">
         
         {/* Close Button */}
         <button
           onClick={onClose}
-          className="absolute top-5 right-5 text-zinc-400 hover:text-white p-2 rounded-full bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 transition-colors cursor-pointer"
+          className="absolute top-5 right-5 text-zinc-400 hover:text-white p-2.5 rounded-full bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 transition-colors cursor-pointer z-20"
         >
           <X className="w-5 h-5" />
         </button>
 
-        {/* Title */}
-        <div className="flex items-center gap-3 mb-6">
-          <div className="w-10 h-10 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 flex items-center justify-center">
-            <Database className="w-5 h-5" />
+        {/* Header */}
+        <div className="flex items-center gap-3.5 mb-6">
+          <div className="w-12 h-12 rounded-2xl bg-[#00B900]/15 border border-[#00B900]/30 text-[#00B900] flex items-center justify-center shadow-[0_0_20px_rgba(0,185,0,0.2)]">
+            <Database className="w-6 h-6" />
           </div>
           <div>
-            <h2 className="text-xl font-serif text-white">ระบบจัดการสต็อกสินค้าแบบเรียลไทม์</h2>
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="text-xl sm:text-2xl font-serif text-white">ระบบจัดการหลังบ้านระดับโปร</h2>
+              <span className="px-2.5 py-0.5 bg-emerald-500/20 text-emerald-400 text-[10px] font-mono font-bold rounded-full border border-emerald-500/30">
+                PRO ADMIN
+              </span>
+              <span className="px-2.5 py-0.5 bg-amber-500/15 text-amber-300 text-[10px] font-mono rounded-full border border-amber-500/30 flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"></span>
+                Cloud Firestore Live
+              </span>
+            </div>
             <p className="text-zinc-400 text-xs mt-0.5">
-              เชื่อมต่อกับ API Server และฐานข้อมูลตัดสต็อกอัตโนมัติ
+              แก้ไขข้อมูล เพิ่มรูป/ลบรูปสินค้า จัดการแกลเลอรี 10 มุมมอง และควบคุมสต็อกแบบเรียลไทม์
             </p>
           </div>
         </div>
 
-        {/* Tab Switcher */}
-        <div className="flex gap-2 mb-6 border-b border-zinc-800 pb-3">
-          <button
-            onClick={() => setActiveTab('stock')}
-            className={`px-4 py-2 rounded-xl text-xs font-semibold tracking-wider transition-all flex items-center gap-2 cursor-pointer ${
-              activeTab === 'stock'
-                ? 'bg-white text-black'
-                : 'bg-zinc-900 text-zinc-400 hover:text-white'
+        {/* Notification Banner */}
+        {notification && (
+          <div
+            className={`mb-5 p-3.5 rounded-2xl border text-xs font-medium flex items-center gap-2 animate-in fade-in duration-200 ${
+              notification.type === 'success'
+                ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                : 'bg-red-500/10 border-red-500/30 text-red-400'
             }`}
           >
-            <Package className="w-3.5 h-3.5" />
-            <span>จัดการสต็อกสินค้า</span>
-          </button>
-          <button
-            onClick={() => setActiveTab('orders')}
-            className={`px-4 py-2 rounded-xl text-xs font-semibold tracking-wider transition-all flex items-center gap-2 cursor-pointer ${
-              activeTab === 'orders'
-                ? 'bg-white text-black'
-                : 'bg-zinc-900 text-zinc-400 hover:text-white'
-            }`}
-          >
-            <Users className="w-3.5 h-3.5" />
-            <span>รายการคำสั่งซื้อ ({orders.length})</span>
-          </button>
-
-          <button
-            onClick={handleResetStock}
-            className="ml-auto text-[11px] text-zinc-500 hover:text-red-400 transition-colors"
-          >
-            รีเซ็ตสต็อกเริ่มต้น
-          </button>
-        </div>
-
-        {saveMessage && (
-          <div className="mb-4 p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs flex items-center gap-2">
-            <CheckCircle className="w-4 h-4" />
-            <span>{saveMessage}</span>
+            {notification.type === 'success' ? (
+              <CheckCircle className="w-4 h-4 flex-shrink-0 text-[#00B900]" />
+            ) : (
+              <AlertCircle className="w-4 h-4 flex-shrink-0 text-red-400" />
+            )}
+            <span>{notification.msg}</span>
           </div>
         )}
 
-        {/* TAB 1: Real-time Stock Manager */}
+        {/* Tab Navigation */}
+        <div className="flex flex-wrap items-center gap-2 mb-6 border-b border-zinc-800/90 pb-4">
+          <button
+            onClick={() => setActiveTab('media')}
+            className={`px-4 py-2.5 rounded-xl text-xs font-semibold tracking-wider transition-all flex items-center gap-2 cursor-pointer ${
+              activeTab === 'media'
+                ? 'bg-white text-black shadow-lg'
+                : 'bg-zinc-900 text-zinc-400 hover:text-white hover:bg-zinc-800'
+            }`}
+          >
+            <ImageIcon className="w-4 h-4" />
+            <span>แก้ไขรูปภาพและข้อมูลสินค้า</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('stock')}
+            className={`px-4 py-2.5 rounded-xl text-xs font-semibold tracking-wider transition-all flex items-center gap-2 cursor-pointer ${
+              activeTab === 'stock'
+                ? 'bg-white text-black shadow-lg'
+                : 'bg-zinc-900 text-zinc-400 hover:text-white hover:bg-zinc-800'
+            }`}
+          >
+            <Package className="w-4 h-4" />
+            <span>ปรับสต็อกด่วน</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('orders')}
+            className={`px-4 py-2.5 rounded-xl text-xs font-semibold tracking-wider transition-all flex items-center gap-2 cursor-pointer ${
+              activeTab === 'orders'
+                ? 'bg-white text-black shadow-lg'
+                : 'bg-zinc-900 text-zinc-400 hover:text-white hover:bg-zinc-800'
+            }`}
+          >
+            <Users className="w-4 h-4" />
+            <span>รายการออเดอร์ ({orders.length})</span>
+          </button>
+        </div>
+
+        {/* ========================================================
+            TAB 1: PRO MEDIA & PRODUCT EDITOR (แก้ไข เพิ่มรูป ลบรูป)
+           ======================================================== */}
+        {activeTab === 'media' && editingProduct && (
+          <div className="space-y-8 flex-1">
+            
+            {/* Product Selector Pills */}
+            <div>
+              <label className="block text-xs font-medium text-zinc-400 uppercase tracking-wider mb-2">
+                เลือกสินค้าที่ต้องการแก้ไข:
+              </label>
+              <div className="grid grid-cols-3 gap-2.5">
+                {products.map((p) => {
+                  const isSelected = p.id === selectedProductId;
+                  return (
+                    <button
+                      key={p.id}
+                      onClick={() => handleSelectProduct(p.id)}
+                      className={`p-3 rounded-2xl border text-left transition-all cursor-pointer flex items-center gap-3 ${
+                        isSelected
+                          ? 'bg-zinc-800/90 border-emerald-500 shadow-[0_0_15px_rgba(0,185,0,0.2)]'
+                          : 'bg-zinc-900/50 border-zinc-800/80 hover:border-zinc-700'
+                      }`}
+                    >
+                      <img
+                        src={p.image}
+                        alt={p.name}
+                        referrerPolicy="no-referrer"
+                        className="w-10 h-10 rounded-xl object-cover bg-zinc-950 flex-shrink-0"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <h4 className="text-white text-xs font-semibold truncate">{p.name}</h4>
+                        <span className="text-[#00B900] text-[11px] font-mono font-bold">
+                          ฿{p.price.toLocaleString()}
+                        </span>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* --- SECTION: PRO IMAGE MANAGEMENT --- */}
+            <div className="p-6 rounded-3xl bg-zinc-900/50 border border-zinc-800/90 space-y-6">
+              <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3 border-b border-zinc-800 pb-4">
+                <div>
+                  <h3 className="text-base font-serif text-white flex items-center gap-2">
+                    <ImageIcon className="w-5 h-5 text-emerald-400" />
+                    <span>ระบบจัดการรูปภาพระดับโปร (Media & Gallery Manager)</span>
+                  </h3>
+                  <p className="text-zinc-400 text-xs mt-0.5">
+                    มีภาพทั้งหมด <strong className="text-white">{editingProduct.galleryImages?.length || 0} รูป</strong> • แนะนำ 8-10 รูปเพื่อแสดงผลในแกลเลอรี 10 มุมมองได้อย่างสมบูรณ์แบบ
+                  </p>
+                </div>
+
+                {/* Upload Buttons */}
+                <div className="flex items-center gap-2">
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    accept="image/*"
+                    multiple
+                    className="hidden"
+                    onChange={(e) => handleFileUpload(e.target.files)}
+                  />
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isUploading}
+                    className="px-4 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-black text-xs font-bold rounded-xl transition-all shadow-[0_0_15px_rgba(0,185,0,0.25)] flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                  >
+                    <Upload className="w-4 h-4" />
+                    <span>{isUploading ? 'กำลังอัปโหลด...' : '+ อัปโหลดรูปใหม่ (หลายรูป)'}</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Add by URL input */}
+              <div className="flex gap-2">
+                <div className="relative flex-1">
+                  <input
+                    type="url"
+                    placeholder="หรือวางลิงก์รูปภาพ (URL) ที่นี่ เช่น https://images.unsplash.com/..."
+                    value={newImageUrl}
+                    onChange={(e) => setNewImageUrl(e.target.value)}
+                    className="w-full px-4 py-2 bg-zinc-950 border border-zinc-800 rounded-xl text-xs text-white placeholder:text-zinc-600 focus:outline-none focus:border-emerald-500 font-mono"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={handleAddImageUrl}
+                  className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-xl text-xs font-medium transition-colors flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>เพิ่มจาก URL</span>
+                </button>
+              </div>
+
+              {/* Gallery Photos Grid with Pro Controls */}
+              <div>
+                <span className="block text-xs font-medium text-zinc-300 mb-3">
+                  รูปภาพในแกลเลอรี (คลิกตั้งเป็นรูปหน้าปก, สลับตำแหน่ง หรือลบ):
+                </span>
+
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3.5">
+                  {(editingProduct.galleryImages || []).map((imgUrl, idx) => {
+                    const isCover = editingProduct.image === imgUrl;
+                    return (
+                      <div
+                        key={idx}
+                        className={`group relative rounded-2xl overflow-hidden border-2 bg-zinc-950 flex flex-col transition-all duration-200 ${
+                          isCover
+                            ? 'border-emerald-500 shadow-[0_0_15px_rgba(0,185,0,0.3)]'
+                            : 'border-zinc-800 hover:border-zinc-600'
+                        }`}
+                      >
+                        {/* Image Preview */}
+                        <div className="w-full aspect-square relative overflow-hidden bg-zinc-900">
+                          <img
+                            src={imgUrl}
+                            alt={`Photo ${idx + 1}`}
+                            referrerPolicy="no-referrer"
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                          />
+
+                          {/* Index Badge */}
+                          <div className="absolute top-2 left-2 bg-black/70 backdrop-blur-md px-2 py-0.5 rounded-md text-[10px] text-white font-mono border border-white/10">
+                            #{idx + 1}
+                          </div>
+
+                          {/* Cover Badge */}
+                          {isCover && (
+                            <div className="absolute top-2 right-2 bg-emerald-500 text-black px-2 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-wider flex items-center gap-1 shadow-md">
+                              <Star className="w-2.5 h-2.5 fill-black" />
+                              <span>หน้าปก</span>
+                            </div>
+                          )}
+
+                          {/* Zoom Button overlay */}
+                          <button
+                            type="button"
+                            onClick={() => setPreviewZoomImage(imgUrl)}
+                            className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white"
+                            title="คลิกเพื่อขยายดูภาพ"
+                          >
+                            <ZoomIn className="w-6 h-6 drop-shadow-md" />
+                          </button>
+                        </div>
+
+                        {/* Action Buttons Bar */}
+                        <div className="p-2 bg-zinc-900/90 border-t border-zinc-800 flex items-center justify-between gap-1">
+                          {/* Set as Cover button */}
+                          <button
+                            type="button"
+                            onClick={() => handleSetAsCover(imgUrl)}
+                            disabled={isCover}
+                            className={`px-2 py-1 rounded text-[10px] font-medium transition-colors cursor-pointer ${
+                              isCover
+                                ? 'text-emerald-400 cursor-default'
+                                : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
+                            }`}
+                            title="ตั้งเป็นภาพหน้าปกหลัก"
+                          >
+                            {isCover ? '✓ ปกหลัก' : 'ตั้งเป็นปก'}
+                          </button>
+
+                          {/* Order shift buttons */}
+                          <div className="flex items-center gap-0.5">
+                            <button
+                              type="button"
+                              onClick={() => handleMoveImage(idx, 'left')}
+                              disabled={idx === 0}
+                              className="p-1 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded disabled:opacity-20 cursor-pointer"
+                              title="ย้ายตำแหน่งไปข้างหน้า"
+                            >
+                              <ArrowLeft className="w-3 h-3" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleMoveImage(idx, 'right')}
+                              disabled={idx === (editingProduct.galleryImages.length - 1)}
+                              className="p-1 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded disabled:opacity-20 cursor-pointer"
+                              title="ย้ายตำแหน่งไปข้างหลัง"
+                            >
+                              <ArrowRight className="w-3 h-3" />
+                            </button>
+                          </div>
+
+                          {/* Delete Photo Button */}
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteImage(idx)}
+                            className="p-1 text-zinc-400 hover:text-red-400 hover:bg-red-500/10 rounded transition-colors cursor-pointer"
+                            title="ลบรูปนี้"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            {/* --- SECTION: PRODUCT DETAILS & SPECIFICATIONS --- */}
+            <div className="p-6 rounded-3xl bg-zinc-900/50 border border-zinc-800/90 space-y-5">
+              <h3 className="text-base font-serif text-white flex items-center gap-2 border-b border-zinc-800 pb-3">
+                <Package className="w-5 h-5 text-amber-400" />
+                <span>ข้อมูลและรายละเอียดสินค้า (Product Details)</span>
+              </h3>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs text-zinc-400 mb-1">ชื่อสินค้า (Title)</label>
+                  <input
+                    type="text"
+                    value={editingProduct.name}
+                    onChange={(e) => setEditingProduct({ ...editingProduct, name: e.target.value })}
+                    className="w-full px-3.5 py-2.5 bg-zinc-950 border border-zinc-800 rounded-xl text-xs text-white focus:border-emerald-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs text-zinc-400 mb-1">ชื่อรุ่นย่อย (Subname / Badge)</label>
+                  <input
+                    type="text"
+                    value={editingProduct.subname}
+                    onChange={(e) => setEditingProduct({ ...editingProduct, subname: e.target.value })}
+                    className="w-full px-3.5 py-2.5 bg-zinc-950 border border-zinc-800 rounded-xl text-xs text-white focus:border-emerald-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs text-zinc-400 mb-1">ราคาขายปัจจุบัน (฿)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={editingProduct.price}
+                    onChange={(e) => setEditingProduct({ ...editingProduct, price: parseFloat(e.target.value) || 0 })}
+                    className="w-full px-3.5 py-2.5 bg-zinc-950 border border-zinc-800 rounded-xl text-xs text-[#00B900] font-bold font-mono focus:border-emerald-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs text-zinc-400 mb-1">ราคาเต็มเดิม (฿)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={editingProduct.originalPrice}
+                    onChange={(e) => setEditingProduct({ ...editingProduct, originalPrice: parseFloat(e.target.value) || 0 })}
+                    className="w-full px-3.5 py-2.5 bg-zinc-950 border border-zinc-800 rounded-xl text-xs text-red-400 font-mono focus:border-emerald-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs text-zinc-400 mb-1">จำนวนสต็อกในคลัง (ตัว)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={editingProduct.stock}
+                    onChange={(e) => setEditingProduct({ ...editingProduct, stock: parseInt(e.target.value, 10) || 0 })}
+                    className="w-full px-3.5 py-2.5 bg-zinc-950 border border-zinc-800 rounded-xl text-xs text-white font-mono focus:border-emerald-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs text-zinc-400 mb-1">ป้ายกำกับพิเศษ (Badge)</label>
+                  <input
+                    type="text"
+                    placeholder="เช่น Masterpiece, Ready To Display"
+                    value={editingProduct.badge || ''}
+                    onChange={(e) => setEditingProduct({ ...editingProduct, badge: e.target.value })}
+                    className="w-full px-3.5 py-2.5 bg-zinc-950 border border-zinc-800 rounded-xl text-xs text-amber-300 focus:border-emerald-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs text-zinc-400 mb-1">คำอธิบายแบบย่อ (Short Description)</label>
+                <textarea
+                  rows={2}
+                  value={editingProduct.description}
+                  onChange={(e) => setEditingProduct({ ...editingProduct, description: e.target.value })}
+                  className="w-full px-3.5 py-2 bg-zinc-950 border border-zinc-800 rounded-xl text-xs text-white focus:border-emerald-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs text-zinc-400 mb-1">คำอธิบายยาวเชิงลึก (Long Description)</label>
+                <textarea
+                  rows={3}
+                  value={editingProduct.longDescription || ''}
+                  onChange={(e) => setEditingProduct({ ...editingProduct, longDescription: e.target.value })}
+                  className="w-full px-3.5 py-2 bg-zinc-950 border border-zinc-800 rounded-xl text-xs text-white focus:border-emerald-500"
+                />
+              </div>
+
+              {/* In-Box Items Checklist */}
+              <div>
+                <label className="block text-xs text-zinc-400 mb-2">อุปกรณ์และของแถมในเซ็ต (In-Box Items):</label>
+                <div className="space-y-2 mb-3">
+                  {(editingProduct.inBoxIncludes || []).map((item, idx) => (
+                    <div key={idx} className="flex items-center justify-between bg-zinc-950 px-3 py-2 rounded-xl border border-zinc-800 text-xs">
+                      <span className="text-zinc-200">✓ {item}</span>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveInBoxItem(idx)}
+                        className="text-zinc-500 hover:text-red-400 p-1 cursor-pointer"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    placeholder="เพิ่มอุปกรณ์ในกล่อง เช่น กล่องอะคริลิค, เจลลี่โปรตีน..."
+                    value={newInBoxItem}
+                    onChange={(e) => setNewInBoxItem(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleAddInBoxItem();
+                      }
+                    }}
+                    className="flex-1 px-3 py-2 bg-zinc-950 border border-zinc-800 rounded-xl text-xs text-white focus:border-emerald-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleAddInBoxItem}
+                    className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-xl text-xs font-medium cursor-pointer"
+                  >
+                    + เพิ่ม
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Bottom Save Changes Bar */}
+            <div className="sticky bottom-0 bg-zinc-950/95 backdrop-blur-md p-4 rounded-2xl border border-zinc-800 shadow-2xl flex items-center justify-between">
+              <div className="text-xs text-zinc-400">
+                <span>กำลังแก้ไข: <strong className="text-white">{editingProduct.name}</strong></span>
+              </div>
+              <button
+                type="button"
+                onClick={handleSaveProductChanges}
+                disabled={isSaving}
+                className="px-6 py-3.5 bg-[#00B900] hover:bg-[#009900] text-white text-xs font-bold uppercase tracking-widest rounded-xl transition-all shadow-[0_0_20px_rgba(0,185,0,0.3)] flex items-center gap-2 cursor-pointer disabled:opacity-50"
+              >
+                <Save className="w-4 h-4" />
+                <span>{isSaving ? 'กำลังบันทึกลงฐานข้อมูล...' : 'บันทึกการเปลี่ยนแปลงทั้งหมด'}</span>
+              </button>
+            </div>
+
+          </div>
+        )}
+
+        {/* ========================================================
+            TAB 2: QUICK STOCK & PRICE MANAGER
+           ======================================================== */}
         {activeTab === 'stock' && (
           <div className="space-y-4">
             {products.map((product) => {
@@ -240,7 +893,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                         min="0"
                         value={edit.stock}
                         onChange={(e) =>
-                          handleStockChange(product.id, 'stock', parseInt(e.target.value) || 0)
+                          handleQuickStockChange(product.id, 'stock', parseInt(e.target.value) || 0)
                         }
                         className="w-20 px-2.5 py-1.5 bg-zinc-950 border border-zinc-800 rounded-lg text-xs text-white text-center font-mono"
                       />
@@ -254,7 +907,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                         min="0"
                         value={edit.price}
                         onChange={(e) =>
-                          handleStockChange(product.id, 'price', parseFloat(e.target.value) || 0)
+                          handleQuickStockChange(product.id, 'price', parseFloat(e.target.value) || 0)
                         }
                         className="w-24 px-2.5 py-1.5 bg-zinc-950 border border-zinc-800 rounded-lg text-xs text-[#00B900] font-bold text-center font-mono"
                       />
@@ -262,7 +915,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
 
                     {/* Save Button */}
                     <button
-                      onClick={() => handleSaveStock(product.id)}
+                      onClick={() => handleSaveQuickStock(product.id)}
                       disabled={isSaving}
                       className="mt-4 md:mt-0 px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-black text-xs font-bold rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
                     >
@@ -276,7 +929,9 @@ export const AdminModal: React.FC<AdminModalProps> = ({
           </div>
         )}
 
-        {/* TAB 2: Orders List */}
+        {/* ========================================================
+            TAB 3: ORDERS LIST
+           ======================================================== */}
         {activeTab === 'orders' && (
           <div className="space-y-4">
             {isLoadingOrders ? (
@@ -362,6 +1017,30 @@ export const AdminModal: React.FC<AdminModalProps> = ({
         )}
 
       </div>
+
+      {/* Image Zoom Modal */}
+      {previewZoomImage && (
+        <div
+          className="fixed inset-0 z-60 bg-black/95 flex items-center justify-center p-4 animate-in fade-in"
+          onClick={() => setPreviewZoomImage(null)}
+        >
+          <div className="relative max-w-2xl max-h-[85vh]">
+            <img
+              src={previewZoomImage}
+              alt="Zoom Preview"
+              referrerPolicy="no-referrer"
+              className="max-w-full max-h-[85vh] object-contain rounded-2xl shadow-2xl"
+            />
+            <button
+              onClick={() => setPreviewZoomImage(null)}
+              className="absolute top-4 right-4 text-white bg-black/70 p-2 rounded-full border border-white/20 hover:bg-black cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };

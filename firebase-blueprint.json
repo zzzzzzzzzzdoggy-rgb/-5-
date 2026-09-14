@@ -1,0 +1,55 @@
+{
+  "entities": {
+    "product": {
+      "title": "Product",
+      "description": "Beetle product set catalog with stock and multi-angle media gallery",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 100 },
+        "name": { "type": "string", "maxLength": 200 },
+        "subname": { "type": "string", "maxLength": 200 },
+        "category": { "type": "string", "maxLength": 50 },
+        "price": { "type": "number" },
+        "originalPrice": { "type": "number" },
+        "stock": { "type": "number" },
+        "badge": { "type": "string", "maxLength": 100 },
+        "isBestSeller": { "type": "boolean" },
+        "description": { "type": "string", "maxLength": 2000 },
+        "longDescription": { "type": "string", "maxLength": 5000 },
+        "image": { "type": "string", "maxLength": 2000 },
+        "galleryImages": { "type": "array" }
+      },
+      "required": ["id", "name", "price", "stock"]
+    },
+    "order": {
+      "title": "Order",
+      "description": "Customer order placement with item details and status",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 100 },
+        "createdAt": { "type": "string", "maxLength": 50 },
+        "customerName": { "type": "string", "maxLength": 200 },
+        "customerPhone": { "type": "string", "maxLength": 50 },
+        "customerAddress": { "type": "string", "maxLength": 1000 },
+        "paymentMethod": { "type": "string", "maxLength": 50 },
+        "items": { "type": "array" },
+        "subtotal": { "type": "number" },
+        "discountAmount": { "type": "number" },
+        "shippingFee": { "type": "number" },
+        "totalAmount": { "type": "number" },
+        "status": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["id", "createdAt", "customerName", "customerPhone", "customerAddress", "items", "totalAmount", "status"]
+    }
+  },
+  "firestore": {
+    "/products/{productId}": {
+      "schema": "product",
+      "description": "Catalog of live beetles and sets available for sale"
+    },
+    "/orders/{orderId}": {
+      "schema": "order",
+      "description": "Customer placed orders and delivery tracking"
+    }
+  }
+}
