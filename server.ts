@@ -473,6 +473,21 @@ async function startServer() {
     res.json({ success: true, order });
   });
 
+  // Delete single order (Admin)
+  app.delete("/api/orders/:id", (req, res) => {
+    const { id } = req.params;
+    orders = orders.filter((o) => o.id !== id);
+    saveOrders(orders);
+    res.json({ success: true, message: `ลบออเดอร์ ${id} สำเร็จ`, remainingCount: orders.length });
+  });
+
+  // Clear all orders (Admin)
+  app.post("/api/orders/clear", (_req, res) => {
+    orders = [];
+    saveOrders(orders);
+    res.json({ success: true, message: "ล้างรายการคำสั่งซื้อทั้งหมดสำเร็จ", remainingCount: 0 });
+  });
+
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({

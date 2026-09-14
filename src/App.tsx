@@ -18,6 +18,7 @@ import { ProductDetailsModal } from './components/ProductDetailsModal';
 import { CartDrawer } from './components/CartDrawer';
 import { CheckoutModal } from './components/CheckoutModal';
 import { AdminModal } from './components/AdminModal';
+import { AdminPinModal } from './components/AdminPinModal';
 import { ShareModal } from './components/ShareModal';
 import { FAQSection } from './components/FAQSection';
 import { Footer } from './components/Footer';
@@ -41,6 +42,8 @@ export default function App() {
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [isAdminOpen, setIsAdminOpen] = useState(false);
+  const [isAdminPinModalOpen, setIsAdminPinModalOpen] = useState(false);
+  const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
   const [adminInitialProductId, setAdminInitialProductId] = useState<string | undefined>(undefined);
   const [isShareOpen, setIsShareOpen] = useState(false);
   const [galleryProduct, setGalleryProduct] = useState<Product | null>(null);
@@ -59,6 +62,30 @@ export default function App() {
       setToastMessage(null);
     }, 3200);
   }, []);
+
+  // Secure Admin entry - Requires Passcode 9999
+  const handleRequestAdmin = useCallback((targetProductId?: string) => {
+    if (isAdminOpen) {
+      setIsAdminOpen(false);
+      setAdminInitialProductId(undefined);
+      setIsAdminAuthenticated(false);
+      return;
+    }
+
+    setAdminInitialProductId(targetProductId);
+
+    if (isAdminAuthenticated) {
+      setIsAdminOpen(true);
+    } else {
+      setIsAdminPinModalOpen(true);
+    }
+  }, [isAdminOpen, isAdminAuthenticated]);
+
+  const handleAdminPinSuccess = useCallback(() => {
+    setIsAdminAuthenticated(true);
+    setIsAdminOpen(true);
+    showToast('ยืนยันรหัส 9999 สำเร็จ ปลดล็อคระบบตั้งค่าแล้ว', 'success');
+  }, [showToast]);
 
   // Sync cart to local storage
   useEffect(() => {
@@ -265,7 +292,7 @@ export default function App() {
         cartCount={cartTotalCount}
         onOpenCart={() => setIsCartOpen(true)}
         isAdmin={isAdminOpen}
-        onToggleAdmin={() => setIsAdminOpen(!isAdminOpen)}
+        onToggleAdmin={() => handleRequestAdmin()}
         onOpenShare={() => setIsShareOpen(true)}
         isFirebaseConnected={isFirebaseConnected}
         visitorCount={visitorCount}
@@ -310,10 +337,7 @@ export default function App() {
                 onAddToCart={handleAddToCart}
                 onOpenGallery={(p) => setGalleryProduct(p)}
                 onOpenDetails={(p) => setDetailsProduct(p)}
-                onEditProduct={(p) => {
-                  setAdminInitialProductId(p.id);
-                  setIsAdminOpen(true);
-                }}
+                onEditProduct={(p) => handleRequestAdmin(p.id)}
               />
             ))}
           </div>
@@ -390,11 +414,22 @@ export default function App() {
         onClose={() => {
           setIsAdminOpen(false);
           setAdminInitialProductId(undefined);
+          setIsAdminAuthenticated(false);
         }}
         products={products}
         onRefreshProducts={fetchServerProducts}
         initialProductId={adminInitialProductId}
         visitorCount={visitorCount}
+      />
+
+      {/* Admin Security PIN 9999 Protection Modal */}
+      <AdminPinModal
+        isOpen={isAdminPinModalOpen}
+        onClose={() => {
+          setIsAdminPinModalOpen(false);
+          setAdminInitialProductId(undefined);
+        }}
+        onSuccess={handleAdminPinSuccess}
       />
 
       <ShareModal

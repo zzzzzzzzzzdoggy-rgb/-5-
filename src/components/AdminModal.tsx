@@ -7,6 +7,8 @@ import {
   updateOrderStatusInFirestore,
   seedExistingOrdersToFirestore,
   getOrdersFromFirestore,
+  deleteOrderFromFirestore,
+  clearAllOrdersFromFirestore,
 } from '../lib/firebase';
 import {
   X,
@@ -31,6 +33,7 @@ import {
   ZoomIn,
   Eye,
   Camera,
+  Lock,
 } from 'lucide-react';
 
 interface AdminModalProps {
@@ -598,6 +601,66 @@ export const AdminModal: React.FC<AdminModalProps> = ({
     }
   };
 
+  // Delete single order
+  const handleDeleteOrder = async (orderId: string) => {
+    if (!window.confirm(`ยืนยันการลบออเดอร์ ${orderId} ออกจากระบบ?`)) {
+      return;
+    }
+
+    try {
+      // 1. Delete from Firestore
+      try {
+        await deleteOrderFromFirestore(orderId);
+      } catch (fErr) {
+        console.warn('[Firebase] Delete order notice:', fErr);
+      }
+
+      // 2. Delete from Server
+      try {
+        await fetch(`/api/orders/${orderId}`, { method: 'DELETE' });
+      } catch (sErr) {
+        console.warn('[Admin] Server delete order fallback:', sErr);
+      }
+
+      // 3. Update local state
+      setOrders((prev) => prev.filter((o) => o.id !== orderId));
+      showNotify(`ลบรายการคำสั่งซื้อ ${orderId} เรียบร้อยแล้ว`);
+    } catch (err) {
+      console.error('[Admin] Delete order error:', err);
+      showNotify('เกิดข้อผิดพลาดในการลบคำสั่งซื้อ', 'error');
+    }
+  };
+
+  // Clear all orders
+  const handleClearAllOrders = async () => {
+    if (!window.confirm('คุณต้องการล้างประวัติคำสั่งซื้อทั้งหมดออกจากระบบหรือไม่? การกระทำนี้ไม่สามารถย้อนกลับได้')) {
+      return;
+    }
+
+    try {
+      // 1. Clear Firestore orders
+      try {
+        await clearAllOrdersFromFirestore();
+      } catch (fErr) {
+        console.warn('[Firebase] Clear orders notice:', fErr);
+      }
+
+      // 2. Clear Server orders
+      try {
+        await fetch('/api/orders/clear', { method: 'POST' });
+      } catch (sErr) {
+        console.warn('[Admin] Server clear orders fallback:', sErr);
+      }
+
+      // 3. Update local state
+      setOrders([]);
+      showNotify('ล้างรายการคำสั่งซื้อทั้งหมดออกจากระบบเรียบร้อยแล้ว');
+    } catch (err) {
+      console.error('[Admin] Clear all orders error:', err);
+      showNotify('เกิดข้อผิดพลาดในการล้างคำสั่งซื้อ', 'error');
+    }
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -607,13 +670,26 @@ export const AdminModal: React.FC<AdminModalProps> = ({
     >
       <div className="bg-zinc-950 border border-zinc-800 rounded-3xl max-w-4xl w-full p-6 sm:p-8 relative shadow-2xl my-6 max-h-[94vh] overflow-y-auto flex flex-col">
         
-        {/* Close Button */}
-        <button
-          onClick={onClose}
-          className="absolute top-5 right-5 text-zinc-400 hover:text-white p-2.5 rounded-full bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 transition-colors cursor-pointer z-20"
-        >
-          <X className="w-5 h-5" />
-        </button>
+        {/* Top Action Buttons */}
+        <div className="absolute top-5 right-5 flex items-center gap-2 z-20">
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-red-950/40 hover:bg-red-900/60 text-red-300 border border-red-500/40 text-xs font-medium transition-colors cursor-pointer"
+            title="ล็อคระบบและออกจากโหมดตั้งค่า"
+          >
+            <Lock className="w-3.5 h-3.5 text-red-400" />
+            <span className="hidden sm:inline">ล็อคระบบ & ออก</span>
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-zinc-400 hover:text-white p-2 rounded-full bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 transition-colors cursor-pointer"
+            title="ปิดหน้าต่าง"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
 
         {/* Header */}
         <div className="flex items-center gap-3.5 mb-6">
@@ -1284,13 +1360,44 @@ export const AdminModal: React.FC<AdminModalProps> = ({
            ======================================================== */}
         {activeTab === 'orders' && (
           <div className="space-y-4">
+            {/* Orders Header & Action Bar */}
+            <div className="flex flex-wrap items-center justify-between gap-3 p-4 rounded-2xl bg-zinc-900/80 border border-zinc-800">
+              <div>
+                <h4 className="text-white text-sm font-semibold flex items-center gap-2">
+                  <span>รายการคำสั่งซื้อจากลูกค้า</span>
+                  <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 text-xs font-mono">
+                    {orders.length} ออเดอร์
+                  </span>
+                </h4>
+                <p className="text-zinc-400 text-xs mt-0.5">
+                  เชื่อมต่อฐานข้อมูล Google Cloud Firestore & ระบบตัดสต็อกอัตโนมัติ
+                </p>
+              </div>
+
+              {orders.length > 0 && (
+                <button
+                  type="button"
+                  onClick={handleClearAllOrders}
+                  className="px-3.5 py-1.5 rounded-xl bg-red-950/40 hover:bg-red-900/60 text-red-300 border border-red-500/40 text-xs font-medium transition-colors flex items-center gap-1.5 cursor-pointer"
+                  title="ลบคำสั่งซื้อทั้งหมดออกจากระบบ"
+                >
+                  <Trash2 className="w-3.5 h-3.5 text-red-400" />
+                  <span>ล้างประวัติออเดอร์ทั้งหมด</span>
+                </button>
+              )}
+            </div>
+
             {isLoadingOrders ? (
               <div className="text-center py-12 text-zinc-500 text-xs">
                 กำลังโหลดรายการคำสั่งซื้อ...
               </div>
             ) : orders.length === 0 ? (
-              <div className="text-center py-12 text-zinc-500 text-xs">
-                ยังไม่มีรายการคำสั่งซื้อในระบบ
+              <div className="text-center py-16 px-4 rounded-2xl border border-dashed border-zinc-800 bg-zinc-900/20 space-y-2">
+                <Package className="w-10 h-10 text-zinc-600 mx-auto" />
+                <p className="text-white text-sm font-medium">ยังไม่มีรายการคำสั่งซื้อในระบบ</p>
+                <p className="text-zinc-500 text-xs max-w-sm mx-auto">
+                  ระบบพร้อมรับออเดอร์ใหม่จากลูกค้า ข้อมูลจะบันทึกและซิงค์ทันทีเมื่อมีลูกค้าสั่งซื้อ
+                </p>
               </div>
             ) : (
               orders.map((order) => (
@@ -1344,21 +1451,33 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                     ))}
                   </div>
 
-                  {/* Status update */}
-                  <div className="flex items-center justify-between pt-1">
-                    <span className="text-[11px] text-zinc-400">สถานะคำสั่งซื้อ:</span>
-                    <select
-                      value={order.status}
-                      onChange={(e) =>
-                        handleUpdateOrderStatus(order.id, e.target.value as Order['status'])
-                      }
-                      className="bg-zinc-950 border border-zinc-800 text-xs text-white px-3 py-1.5 rounded-lg focus:border-emerald-500"
+                  {/* Status update & Delete Button */}
+                  <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-zinc-800/60">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] text-zinc-400">สถานะ:</span>
+                      <select
+                        value={order.status}
+                        onChange={(e) =>
+                          handleUpdateOrderStatus(order.id, e.target.value as Order['status'])
+                        }
+                        className="bg-zinc-950 border border-zinc-800 text-xs text-white px-3 py-1.5 rounded-lg focus:border-emerald-500"
+                      >
+                        <option value="pending_payment">รอชำระเงิน</option>
+                        <option value="paid_verified">ชำระแล้ว / ยืนยันสลิป</option>
+                        <option value="preparing">กำลังจัดเตรียมพัสดุ</option>
+                        <option value="shipped">จัดส่งแล้ว</option>
+                      </select>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteOrder(order.id)}
+                      className="px-2.5 py-1.5 text-xs text-zinc-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors flex items-center gap-1 cursor-pointer border border-transparent hover:border-red-500/30"
+                      title="ลบออเดอร์นี้"
                     >
-                      <option value="pending_payment">รอชำระเงิน</option>
-                      <option value="paid_verified">ชำระแล้ว / ยืนยันสลิป</option>
-                      <option value="preparing">กำลังจัดเตรียมพัสดุ</option>
-                      <option value="shipped">จัดส่งแล้ว</option>
-                    </select>
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>ลบออเดอร์</span>
+                    </button>
                   </div>
                 </div>
               ))

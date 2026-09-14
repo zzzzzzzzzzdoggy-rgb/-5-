@@ -12,6 +12,7 @@ import {
   getDocFromServer,
   query,
   orderBy,
+  deleteDoc,
 } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
 import { Product, Order } from '../types';
@@ -376,6 +377,30 @@ export async function updateOrderStatusInFirestore(
     console.log(`[Firebase] Order ${orderId} status changed to ${status}`);
   } catch (err) {
     handleFirestoreError(err, OperationType.UPDATE, path);
+  }
+}
+
+// Delete an order from Firestore
+export async function deleteOrderFromFirestore(orderId: string): Promise<void> {
+  const path = `orders/${orderId}`;
+  try {
+    await deleteDoc(doc(db, 'orders', orderId));
+    console.log(`[Firebase] Order ${orderId} deleted from Firestore`);
+  } catch (err) {
+    handleFirestoreError(err, OperationType.DELETE, path);
+  }
+}
+
+// Clear all orders from Firestore
+export async function clearAllOrdersFromFirestore(): Promise<void> {
+  const path = 'orders';
+  try {
+    const snap = await getDocs(collection(db, path));
+    const deletePromises = snap.docs.map((docSnap) => deleteDoc(docSnap.ref));
+    await Promise.all(deletePromises);
+    console.log('[Firebase] All orders cleared from Firestore');
+  } catch (err) {
+    handleFirestoreError(err, OperationType.DELETE, path);
   }
 }
 
