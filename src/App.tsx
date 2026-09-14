@@ -1,7 +1,13 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Product, CartItem, Coupon, Order } from './types';
 import { INITIAL_PRODUCTS } from './data/products';
-import { testFirestoreConnection, seedFirestoreIfEmpty, subscribeToProducts } from './lib/firebase';
+import {
+  testFirestoreConnection,
+  seedFirestoreIfEmpty,
+  subscribeToProducts,
+  getOrIncrementVisitorCount,
+  subscribeToVisitorCount,
+} from './lib/firebase';
 import { Navbar } from './components/Navbar';
 import { HeroSection } from './components/HeroSection';
 import { TrustBar } from './components/TrustBar';
@@ -40,6 +46,7 @@ export default function App() {
   const [galleryProduct, setGalleryProduct] = useState<Product | null>(null);
   const [detailsProduct, setDetailsProduct] = useState<Product | null>(null);
   const [isFirebaseConnected, setIsFirebaseConnected] = useState(false);
+  const [visitorCount, setVisitorCount] = useState<number>(200);
 
   // Toast state
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -88,6 +95,34 @@ export default function App() {
     initFirebase();
     return () => {
       if (unsubscribe) unsubscribe();
+    };
+  }, []);
+
+  // Visitor Counter: Starts at 200, next is 201, 202...
+  useEffect(() => {
+    let unsubscribeVisitor: (() => void) | undefined;
+    async function initVisitor() {
+      try {
+        const count = await getOrIncrementVisitorCount();
+        setVisitorCount(count);
+      } catch (err) {
+        console.warn('Visitor counter init notice:', err);
+      }
+
+      try {
+        unsubscribeVisitor = subscribeToVisitorCount((count) => {
+          if (typeof count === 'number' && count >= 200) {
+            setVisitorCount(count);
+          }
+        });
+      } catch (e) {
+        console.warn('Visitor counter sub notice:', e);
+      }
+    }
+
+    initVisitor();
+    return () => {
+      if (unsubscribeVisitor) unsubscribeVisitor();
     };
   }, []);
 
@@ -230,6 +265,7 @@ export default function App() {
         onToggleAdmin={() => setIsAdminOpen(!isAdminOpen)}
         onOpenShare={() => setIsShareOpen(true)}
         isFirebaseConnected={isFirebaseConnected}
+        visitorCount={visitorCount}
       />
 
       {/* Hero Section (Cinematic Full-Screen 100% based on reference) */}
@@ -355,6 +391,7 @@ export default function App() {
         products={products}
         onRefreshProducts={fetchServerProducts}
         initialProductId={adminInitialProductId}
+        visitorCount={visitorCount}
       />
 
       <ShareModal

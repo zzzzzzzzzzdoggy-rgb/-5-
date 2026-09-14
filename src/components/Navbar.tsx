@@ -1,5 +1,5 @@
 import React from 'react';
-import { ShoppingBag, Share2, Settings, Phone, Sparkles } from 'lucide-react';
+import { ShoppingBag, Share2, Settings, Phone, Sparkles, Eye } from 'lucide-react';
 
 interface NavbarProps {
   cartCount: number;
@@ -8,6 +8,7 @@ interface NavbarProps {
   onToggleAdmin: () => void;
   onOpenShare: () => void;
   isFirebaseConnected?: boolean;
+  visitorCount?: number;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -17,23 +18,46 @@ export const Navbar: React.FC<NavbarProps> = ({
   onToggleAdmin,
   onOpenShare,
   isFirebaseConnected = false,
+  visitorCount,
 }) => {
   return (
     <nav
       id="main-navbar"
       className="fixed top-0 w-full z-40 bg-[#09090b]/85 backdrop-blur-xl border-b border-zinc-800/60 transition-all duration-300"
     >
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 h-20 flex items-center justify-between">
-        {/* Brand Logo */}
-        <a
-          href="#"
-          className="flex items-center gap-2 group cursor-pointer"
-        >
-          <span className="text-xl sm:text-2xl tracking-[0.25em] font-serif font-light text-white group-hover:text-emerald-400 transition-colors">
-            EUPATORUS
-          </span>
-          <span className="w-1.5 h-1.5 rounded-full bg-[#00B900] shadow-[0_0_8px_#00B900]"></span>
-        </a>
+      <div className="max-w-7xl mx-auto px-3 sm:px-6 h-20 flex items-center justify-between">
+        {/* Brand Logo & Corner Visitor Counter */}
+        <div className="flex items-center gap-2 sm:gap-3.5">
+          <a
+            href="#"
+            className="flex items-center gap-2 group cursor-pointer shrink-0"
+          >
+            <span className="text-lg sm:text-2xl tracking-[0.2em] sm:tracking-[0.25em] font-serif font-light text-white group-hover:text-emerald-400 transition-colors">
+              EUPATORUS
+            </span>
+            <span className="w-1.5 h-1.5 rounded-full bg-[#00B900] shadow-[0_0_8px_#00B900]"></span>
+          </a>
+
+          {/* Corner Visitor Counter Badge (Starts at 200, next is 201...) */}
+          {typeof visitorCount === 'number' && (
+            <div
+              id="corner-visitor-badge"
+              className="flex items-center gap-1.5 px-2 sm:px-2.5 py-1 rounded-full bg-emerald-950/50 border border-emerald-500/35 text-emerald-300 text-[11px] sm:text-xs font-mono shadow-[0_0_12px_rgba(16,185,129,0.15)]"
+              title={`สถิติผู้เข้าชม: ${visitorCount} ครั้ง`}
+            >
+              <span className="relative flex h-1.5 w-1.5">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
+              </span>
+              <Eye className="w-3 h-3 text-emerald-400 shrink-0" />
+              <span className="text-zinc-300 text-[10px] sm:text-xs">เข้ามาดู</span>
+              <span className="font-bold text-emerald-300 font-mono tracking-wider">
+                {visitorCount.toLocaleString()}
+              </span>
+              <span className="text-zinc-400 text-[10px] sm:text-xs">ครั้ง</span>
+            </div>
+          )}
+        </div>
 
         {/* Desktop Nav Links */}
         <div className="hidden md:flex items-center gap-8 text-xs uppercase tracking-widest text-zinc-400">

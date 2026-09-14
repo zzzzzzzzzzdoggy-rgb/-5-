@@ -70,6 +70,43 @@ if (!fs.existsSync(UPLOADS_DIR)) {
 
 const STOCK_FILE = path.join(DATA_DIR, "stock.json");
 const ORDERS_FILE = path.join(DATA_DIR, "orders.json");
+const STATS_FILE = path.join(DATA_DIR, "stats.json");
+
+interface StatsData {
+  visitorCount: number;
+  lastUpdated?: string;
+}
+
+function loadStats(): StatsData {
+  try {
+    if (fs.existsSync(STATS_FILE)) {
+      const data = JSON.parse(fs.readFileSync(STATS_FILE, "utf-8"));
+      if (typeof data.visitorCount === "number" && data.visitorCount >= 200) {
+        return data;
+      }
+    }
+  } catch (err) {
+    console.error("Error reading stats.json:", err);
+  }
+  const defaultStats: StatsData = { visitorCount: 200, lastUpdated: new Date().toISOString() };
+  try {
+    fs.writeFileSync(STATS_FILE, JSON.stringify(defaultStats, null, 2), "utf-8");
+  } catch (e) {
+    console.error("Error writing default stats:", e);
+  }
+  return defaultStats;
+}
+
+function saveStats(stats: StatsData) {
+  try {
+    stats.lastUpdated = new Date().toISOString();
+    fs.writeFileSync(STATS_FILE, JSON.stringify(stats, null, 2), "utf-8");
+  } catch (err) {
+    console.error("Error saving stats.json:", err);
+  }
+}
+
+let siteStats = loadStats();
 
 const defaultProducts: ProductData[] = [
   {
@@ -178,6 +215,17 @@ async function startServer() {
   // API Routes
   app.get("/api/health", (_req, res) => {
     res.json({ status: "ok", timestamp: new Date().toISOString() });
+  });
+
+  // Visitor Counter: starts at 200, increments to 201, 202...
+  app.get("/api/visitor-count", (_req, res) => {
+    res.json({ success: true, count: siteStats.visitorCount });
+  });
+
+  app.post("/api/visitor-count/increment", (_req, res) => {
+    siteStats.visitorCount = Math.max(200, siteStats.visitorCount) + 1;
+    saveStats(siteStats);
+    res.json({ success: true, count: siteStats.visitorCount });
   });
 
   // Upload image endpoint (supports base64 and returns public accessible URL)

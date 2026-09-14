@@ -11,6 +11,10 @@
    - Customers or admins can read their placed order if matched or if admin.
    - Order statuses can only be transitioned into valid statuses (`pending_payment`, `paid_verified`, `preparing`, `shipped`, `cancelled`).
 
+3. **Visitor Counter Integrity (Stats)**:
+   - Anyone can read the visitor count (`/stats/visitors`).
+   - The visitor counter must be a valid number and cannot be initialized or reset below 200.
+
 ## 2. The "Dirty Dozen" Threat Payloads
 1. **Negative Stock Injection**: Attacker attempts to write a product with `stock = -10` to trigger stock errors.
 2. **Arbitrary Price Spoofing**: Attacker tries to update price of Set 2 to `0.01` without admin authentication.

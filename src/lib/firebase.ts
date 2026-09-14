@@ -318,6 +318,23 @@ export async function saveOrderToFirestore(order: Order): Promise<void> {
   }
 }
 
+// Get orders directly from Firestore
+export async function getOrdersFromFirestore(): Promise<Order[]> {
+  const path = 'orders';
+  try {
+    const snap = await getDocs(collection(db, path));
+    const items: Order[] = [];
+    snap.forEach((docSnap) => {
+      items.push(docSnap.data() as Order);
+    });
+    items.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    return items;
+  } catch (err) {
+    console.warn('[Firebase] getOrdersFromFirestore fallback warning:', err);
+    return [];
+  }
+}
+
 // Subscribe to orders in Firestore
 export function subscribeToOrders(
   onUpdate: (orders: Order[]) => void,
@@ -360,4 +377,72 @@ export async function updateOrderStatusInFirestore(
   } catch (err) {
     handleFirestoreError(err, OperationType.UPDATE, path);
   }
+}
+
+// ==========================================
+// Visitor Statistics (starts at 200, next is 201...)
+// ==========================================
+export async function getOrIncrementVisitorCount(): Promise<number> {
+  const docRef = doc(db, 'stats', 'visitors');
+  try {
+    const snap = await getDoc(docRef);
+    let count = 200;
+    if (snap.exists()) {
+      const data = snap.data();
+      if (typeof data.count === 'number' && data.count >= 200) {
+        count = data.count;
+      }
+    } else {
+      // Initialize with 200 if not exists
+      await setDoc(docRef, { count: 200, createdAt: new Date().toISOString() });
+    }
+
+    // Check if user session has already incremented during this browser session
+    const hasCounted = sessionStorage.getItem('eupatorus_visitor_counted');
+    if (!hasCounted) {
+      count = count + 1;
+      await setDoc(docRef, { count, updatedAt: new Date().toISOString() }, { merge: true });
+      sessionStorage.setItem('eupatorus_visitor_counted', 'true');
+      // Sync to local server stats as well
+      fetch('/api/visitor-count/increment', { method: 'POST' }).catch(() => {});
+    }
+    return count;
+  } catch (err) {
+    console.warn('[Firebase] Visitor count fallback to server API:', err);
+    try {
+      const hasCounted = sessionStorage.getItem('eupatorus_visitor_counted');
+      const url = hasCounted ? '/api/visitor-count' : '/api/visitor-count/increment';
+      const method = hasCounted ? 'GET' : 'POST';
+      const res = await fetch(url, { method });
+      const data = await res.json();
+      if (!hasCounted) {
+        sessionStorage.setItem('eupatorus_visitor_counted', 'true');
+      }
+      return typeof data.count === 'number' ? data.count : 201;
+    } catch {
+      return 201;
+    }
+  }
+}
+
+export function subscribeToVisitorCount(
+  onUpdate: (count: number) => void,
+  onError?: (err: Error) => void
+) {
+  const docRef = doc(db, 'stats', 'visitors');
+  return onSnapshot(
+    docRef,
+    (snap) => {
+      if (snap.exists()) {
+        const data = snap.data();
+        if (typeof data.count === 'number' && data.count >= 200) {
+          onUpdate(data.count);
+        }
+      }
+    },
+    (err) => {
+      console.warn('[Firebase] Visitor count subscription fallback:', err);
+      if (onError) onError(err);
+    }
+  );
 }

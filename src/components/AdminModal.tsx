@@ -5,6 +5,7 @@ import {
   subscribeToOrders,
   updateOrderStatusInFirestore,
   seedExistingOrdersToFirestore,
+  getOrdersFromFirestore,
 } from '../lib/firebase';
 import {
   X,
@@ -27,6 +28,7 @@ import {
   ExternalLink,
   Layers,
   ZoomIn,
+  Eye,
 } from 'lucide-react';
 
 interface AdminModalProps {
@@ -35,6 +37,7 @@ interface AdminModalProps {
   products: Product[];
   onRefreshProducts: () => void;
   initialProductId?: string;
+  visitorCount?: number;
 }
 
 export const AdminModal: React.FC<AdminModalProps> = ({
@@ -43,6 +46,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
   products,
   onRefreshProducts,
   initialProductId,
+  visitorCount,
 }) => {
   const [activeTab, setActiveTab] = useState<'media' | 'stock' | 'orders'>('media');
   const [selectedProductId, setSelectedProductId] = useState<string>('');
@@ -90,9 +94,14 @@ export const AdminModal: React.FC<AdminModalProps> = ({
       };
     });
     setStockEdits(initialStock);
-
-    loadOrders();
   }, [isOpen, initialProductId, products]);
+
+  // Load orders when modal opens or when switching to orders tab
+  useEffect(() => {
+    if (isOpen && activeTab === 'orders') {
+      loadOrders();
+    }
+  }, [isOpen, activeTab]);
 
   // Real-time Firestore orders subscription
   useEffect(() => {
@@ -106,7 +115,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
         }
       });
     } catch (e) {
-      console.warn('[Firebase] Orders subscription fallback:', e);
+      console.warn('[Firebase] Orders subscription notice:', e);
     }
     return () => {
       if (unsub) unsub();
@@ -115,23 +124,40 @@ export const AdminModal: React.FC<AdminModalProps> = ({
 
   const loadOrders = async () => {
     setIsLoadingOrders(true);
+    let loaded = false;
+
+    // 1. Try server API
     try {
       const res = await fetch('/api/orders');
-      const data = await res.json();
-      if (data.success && data.orders) {
-        setOrders(data.orders);
-        // Sync any server orders to Firestore
-        try {
-          await seedExistingOrdersToFirestore(data.orders);
-        } catch (sErr) {
-          console.warn('[Firebase] Order sync warning:', sErr);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && Array.isArray(data.orders)) {
+          setOrders(data.orders);
+          loaded = true;
+          // Sync any server orders to Firestore in background
+          seedExistingOrdersToFirestore(data.orders).catch((sErr) => {
+            console.warn('[Firebase] Order sync warning:', sErr);
+          });
         }
       }
-    } catch (err) {
-      console.error('Error fetching orders:', err);
-    } finally {
-      setIsLoadingOrders(false);
+    } catch (apiErr) {
+      console.warn('[Admin] Server /api/orders unreachable, falling back to Firestore orders:', apiErr);
     }
+
+    // 2. Fallback to Firestore directly if server API is unavailable
+    if (!loaded) {
+      try {
+        const firestoreOrders = await getOrdersFromFirestore();
+        if (firestoreOrders && firestoreOrders.length > 0) {
+          setOrders(firestoreOrders);
+          loaded = true;
+        }
+      } catch (fErr) {
+        console.warn('[Admin] Firestore orders fallback notice:', fErr);
+      }
+    }
+
+    setIsLoadingOrders(false);
   };
 
   const showNotify = (msg: string, type: 'success' | 'error' = 'success') => {
@@ -190,13 +216,15 @@ export const AdminModal: React.FC<AdminModalProps> = ({
       // If no main image exists, set first uploaded as cover
       const updatedCover = editingProduct.image || uploadedUrls[0];
 
-      setEditingProduct({
+      const updatedProduct: Product = {
         ...editingProduct,
         image: updatedCover,
         galleryImages: updatedGallery,
-      });
+      };
 
-      showNotify(`อัปโหลดรูปภาพสำเร็จ ${uploadedUrls.length} รูป!`);
+      setEditingProduct(updatedProduct);
+      showNotify(`อัปโหลดรูปภาพสำเร็จ ${uploadedUrls.length} รูป (บันทึกทันที)`);
+      await persistProductChangesImmediately(updatedProduct);
     } catch (err) {
       console.error(err);
       showNotify('เกิดข้อผิดพลาดในการอัปโหลดภาพ', 'error');
@@ -206,22 +234,49 @@ export const AdminModal: React.FC<AdminModalProps> = ({
     }
   };
 
-  // Add photo via direct URL
-  const handleAddImageUrl = () => {
+  // Helper to persist product changes immediately to Firestore & Server (for instant photo operations)
+  const persistProductChangesImmediately = async (productToSave: Product, successMsg?: string) => {
+    try {
+      try {
+        await updateProductInFirestore(productToSave);
+      } catch (fErr) {
+        console.warn('[Firebase] Immediate photo sync Firestore warning:', fErr);
+      }
+
+      const res = await fetch('/api/products/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(productToSave),
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        onRefreshProducts();
+        if (successMsg) showNotify(successMsg);
+      }
+    } catch (err) {
+      console.error('Failed to auto-save product changes:', err);
+    }
+  };
+
+  // Add photo via direct URL and save immediately
+  const handleAddImageUrl = async () => {
     if (!newImageUrl.trim() || !editingProduct) return;
     const url = newImageUrl.trim();
     const updatedGallery = [...(editingProduct.galleryImages || []), url];
-    setEditingProduct({
+    const updatedProduct: Product = {
       ...editingProduct,
       image: editingProduct.image || url,
       galleryImages: updatedGallery,
-    });
+    };
+    setEditingProduct(updatedProduct);
     setNewImageUrl('');
-    showNotify('เพิ่มรูปภาพจากลิงก์เรียบร้อยแล้ว');
+    showNotify('เพิ่มรูปภาพเรียบร้อยแล้ว (บันทึกทันที)');
+    await persistProductChangesImmediately(updatedProduct);
   };
 
-  // Delete an image from gallery
-  const handleDeleteImage = (indexToDelete: number) => {
+  // Delete an image from gallery - deletes immediately and auto-saves to Cloud Firestore & Server
+  const handleDeleteImage = async (indexToDelete: number) => {
     if (!editingProduct) return;
     const targetUrl = editingProduct.galleryImages[indexToDelete];
     const updatedGallery = editingProduct.galleryImages.filter((_, idx) => idx !== indexToDelete);
@@ -232,26 +287,34 @@ export const AdminModal: React.FC<AdminModalProps> = ({
       newCover = updatedGallery.length > 0 ? updatedGallery[0] : '/images/hero.jpg';
     }
 
-    setEditingProduct({
+    const updatedProduct: Product = {
       ...editingProduct,
       image: newCover,
       galleryImages: updatedGallery,
-    });
-    showNotify('ลบรูปภาพออกจากแกลเลอรีแล้ว');
+    };
+
+    // 1. Instant local update for smooth UI
+    setEditingProduct(updatedProduct);
+    showNotify('ลบรูปภาพเรียบร้อยแล้ว (บันทึกทันที)');
+
+    // 2. Persist immediately to Cloud Firestore and Server
+    await persistProductChangesImmediately(updatedProduct);
   };
 
-  // Set image as main cover
-  const handleSetAsCover = (imageUrl: string) => {
+  // Set image as main cover and save immediately
+  const handleSetAsCover = async (imageUrl: string) => {
     if (!editingProduct) return;
-    setEditingProduct({
+    const updatedProduct: Product = {
       ...editingProduct,
       image: imageUrl,
-    });
-    showNotify('ตั้งเป็นภาพหน้าปกสินค้าเรียบร้อยแล้ว');
+    };
+    setEditingProduct(updatedProduct);
+    showNotify('ตั้งเป็นภาพหน้าปกเรียบร้อยแล้ว (บันทึกทันที)');
+    await persistProductChangesImmediately(updatedProduct);
   };
 
-  // Move image left in gallery order
-  const handleMoveImage = (fromIndex: number, direction: 'left' | 'right') => {
+  // Move image left in gallery order and save immediately
+  const handleMoveImage = async (fromIndex: number, direction: 'left' | 'right') => {
     if (!editingProduct) return;
     const gallery = [...editingProduct.galleryImages];
     const toIndex = direction === 'left' ? fromIndex - 1 : fromIndex + 1;
@@ -261,10 +324,13 @@ export const AdminModal: React.FC<AdminModalProps> = ({
     gallery[fromIndex] = gallery[toIndex];
     gallery[toIndex] = temp;
 
-    setEditingProduct({
+    const updatedProduct: Product = {
       ...editingProduct,
       galleryImages: gallery,
-    });
+    };
+
+    setEditingProduct(updatedProduct);
+    await persistProductChangesImmediately(updatedProduct);
   };
 
   // In-Box items management
@@ -379,20 +445,23 @@ export const AdminModal: React.FC<AdminModalProps> = ({
         console.warn('[Firebase] Order status Firestore sync warning:', fErr);
       }
 
-      const res = await fetch(`/api/orders/${orderId}/status`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        setOrders((prev) =>
-          prev.map((o) => (o.id === orderId ? { ...o, status } : o))
-        );
-        showNotify(`อัปเดตสถานะออเดอร์ ${orderId} ลง Cloud Firestore แล้ว`);
+      try {
+        await fetch(`/api/orders/${orderId}/status`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status }),
+        });
+      } catch (sErr) {
+        console.warn('[Admin] Server status sync fallback:', sErr);
       }
+
+      setOrders((prev) =>
+        prev.map((o) => (o.id === orderId ? { ...o, status } : o))
+      );
+      showNotify(`อัปเดตสถานะออเดอร์ ${orderId} ลง Cloud Firestore แล้ว`);
     } catch (err) {
-      console.error(err);
+      console.warn('[Admin] Status update error:', err);
+      showNotify('เกิดข้อผิดพลาดในการอัปเดตสถานะ', 'error');
     }
   };
 
@@ -428,6 +497,12 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                 <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"></span>
                 Cloud Firestore Live
               </span>
+              {typeof visitorCount === 'number' && (
+                <span className="px-2.5 py-0.5 bg-zinc-900 text-emerald-300 text-[10px] font-mono rounded-full border border-emerald-500/30 flex items-center gap-1.5 shadow-[0_0_10px_rgba(16,185,129,0.15)]">
+                  <Eye className="w-3 h-3 text-emerald-400" />
+                  <span>สถิติเข้าชม: {visitorCount.toLocaleString()} ครั้ง</span>
+                </span>
+              )}
             </div>
             <p className="text-zinc-400 text-xs mt-0.5">
               แก้ไขข้อมูล เพิ่มรูป/ลบรูปสินค้า จัดการแกลเลอรี 10 มุมมอง และควบคุมสต็อกแบบเรียลไทม์
@@ -591,9 +666,15 @@ export const AdminModal: React.FC<AdminModalProps> = ({
 
               {/* Gallery Photos Grid with Pro Controls */}
               <div>
-                <span className="block text-xs font-medium text-zinc-300 mb-3">
-                  รูปภาพในแกลเลอรี (คลิกตั้งเป็นรูปหน้าปก, สลับตำแหน่ง หรือลบ):
-                </span>
+                <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+                  <span className="text-xs font-medium text-zinc-300">
+                    รูปภาพในแกลเลอรี (คลิกตั้งเป็นรูปหน้าปก, สลับตำแหน่ง หรือกดลบรูปได้ทันที):
+                  </span>
+                  <span className="text-[11px] text-emerald-400 font-mono bg-emerald-500/10 px-2.5 py-0.5 rounded-full border border-emerald-500/25 flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                    <span>ลบรูปแล้วระบบจะบันทึกทันที</span>
+                  </span>
+                </div>
 
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3.5">
                   {(editingProduct.galleryImages || []).map((imgUrl, idx) => {
@@ -683,10 +764,10 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                           <button
                             type="button"
                             onClick={() => handleDeleteImage(idx)}
-                            className="p-1 text-zinc-400 hover:text-red-400 hover:bg-red-500/10 rounded transition-colors cursor-pointer"
-                            title="ลบรูปนี้"
+                            className="p-1.5 text-zinc-400 hover:text-red-400 hover:bg-red-500/15 active:scale-95 rounded-lg transition-all cursor-pointer group/del"
+                            title="ลบรูปนี้ทันที (บันทึกอัตโนมัติ)"
                           >
-                            <Trash2 className="w-3.5 h-3.5" />
+                            <Trash2 className="w-3.5 h-3.5 group-hover/del:scale-110 transition-transform" />
                           </button>
                         </div>
                       </div>

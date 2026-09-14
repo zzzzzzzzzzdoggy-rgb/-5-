@@ -40,6 +40,16 @@
         "status": { "type": "string", "maxLength": 50 }
       },
       "required": ["id", "createdAt", "customerName", "customerPhone", "customerAddress", "items", "totalAmount", "status"]
+    },
+    "stat": {
+      "title": "Stat",
+      "description": "Store visitor counter tracking total page visits initialized at 200",
+      "type": "object",
+      "properties": {
+        "count": { "type": "number" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["count"]
     }
   },
   "firestore": {
@@ -50,6 +60,10 @@
     "/orders/{orderId}": {
       "schema": "order",
       "description": "Customer placed orders and delivery tracking"
+    },
+    "/stats/{statId}": {
+      "schema": "stat",
+      "description": "Aggregated site metrics such as visitor count"
     }
   }
 }
