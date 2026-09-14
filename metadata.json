@@ -1,0 +1,6 @@
+{
+  "name": "Eupatorus | ด้วงกว่าง 5 เขา พรีเมียม",
+  "description": "เว็บบอร์ดพรีเซนต์และจำหน่ายด้วงกว่าง 5 เขา (กว่างซางเหนือ - Eupatorus gracilicornis) เกรดสะสมพรีเมียม ประวัติสายพันธุ์ ระบบสั่งซื้อออนไลน์และตัดสต็อกเรียลไทม์",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

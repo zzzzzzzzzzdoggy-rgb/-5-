@@ -1,0 +1,23 @@
+[
+  {
+    "id": "EUP-464811-567",
+    "createdAt": "2026-09-14T05:07:44.811Z",
+    "customerName": "ทดสอบ ระบบ",
+    "customerPhone": "0812345678",
+    "customerAddress": "เชียงใหม่",
+    "paymentMethod": "promptpay",
+    "items": [
+      {
+        "productId": "set-1",
+        "name": "เซท 1: ด้วงเขาสั้น",
+        "price": 399,
+        "quantity": 1
+      }
+    ],
+    "subtotal": 399,
+    "discountAmount": 0,
+    "shippingFee": 0,
+    "totalAmount": 399,
+    "status": "paid_verified"
+  }
+]

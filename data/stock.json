@@ -1,0 +1,65 @@
+[
+  {
+    "id": "set-1",
+    "name": "เซท 1: ด้วงเขาสั้น",
+    "subname": "Premium Display Set",
+    "category": "male_short",
+    "price": 399,
+    "originalPrice": 499,
+    "stock": 6,
+    "remainingAlert": "เหลือน้อย • พร้อมจัดส่ง",
+    "badge": "Ready To Display",
+    "isBestSeller": false,
+    "description": "เซ็ตของขวัญพร้อมตั้งโชว์ (Ready-to-display) บรรจุในถุงกระดาษหน้าต่างใสผูกโบว์สีทองสุดหรู ภายในครบจบ: เปลือกไม้ ขี้เลื่อย อ้อย และเยลลี่ นำไปตั้งโชว์ประดับห้องได้ทันที ดูแลรักษาง่ายเพียงแค่คอยเปลี่ยนอาหาร",
+    "longDescription": "กว่างซางเหนือเพศผู้ฟอร์มเขาสั้น (Minor Form) โครงสร้างบึกบึน แข็งแรง ว่องไว อายุยืนยาว จุดเด่นคือจัดมาเป็นเซ็ตของขวัญสำเร็จรูปพร้อมเคสใสโชว์และวัสดุรองพื้นครบชุด",
+    "image": "/images/set1.jpg",
+    "galleryImages": [
+      "/images/set1.jpg",
+      "/images/hero.jpg",
+      "/images/set2.jpg",
+      "/images/set3.jpg"
+    ]
+  },
+  {
+    "id": "set-2",
+    "name": "เซท 2: เขายาว (ตัวท็อปประกวด)",
+    "subname": "Premium Long Horn (Masterpiece)",
+    "category": "male_long",
+    "price": 499,
+    "originalPrice": 690,
+    "stock": 2,
+    "remainingAlert": "Only 2 Left • โควต้าพิเศษ",
+    "badge": "Masterpiece",
+    "isBestSeller": true,
+    "description": "เกรดคัดพิเศษ เขายาวเรียวสวยงาม ครบ 5 แฉกสมบูรณ์แบบ ไซส์ใหญ่ ฟอร์มประกวด โดดเด่นที่สุด สง่างามสมศักดิ์ศรีราชันย์แห่งขุนเขา",
+    "longDescription": "กว่างซางเหนือเพศผู้ฟอร์มเขายาวพิเศษ (Major Form) สุดยอดความภูมิใจของนักสะสมแมลงปีกแข็งระดับประเทศ คัดเฉพาะตัวที่มีเขาหน้าผากยาวโค้งได้องศาได้สัดส่วนทองคำ",
+    "image": "/images/set2.jpg",
+    "galleryImages": [
+      "/images/set2.jpg",
+      "/images/hero.jpg",
+      "/images/set1.jpg",
+      "/images/set3.jpg"
+    ]
+  },
+  {
+    "id": "set-3",
+    "name": "เซท 3: ตัวเมีย (สายพันธุ์เพาะขยาย)",
+    "subname": "Breeding Essential",
+    "category": "female",
+    "price": 119,
+    "originalPrice": 199,
+    "stock": 5,
+    "remainingAlert": "สายเลือดแท้ • พร้อมผสม",
+    "badge": "Breeding Essential",
+    "isBestSeller": false,
+    "description": "แข็งแรง ปราดเปรียว สายเลือดดีเยี่ยม เหมาะสำหรับนำไปเพาะพันธุ์เพื่อสร้างสายเลือดเกรดพรีเมียมในรุ่นต่อไป ผสมติดง่าย ไข่ดก",
+    "longDescription": "เพศเมียกว่างซางเหนือคัดไซส์ใหญ่พิเศษ น้ำหนักตัวดี ลำตัวแน่น ผิวเปลือกปีกเรียบเงา ขาแข็งแรง เล็บเกาะเหนียวแน่น ผ่านการพักฟื้นและเสริมอาหารบำรุงไข่",
+    "image": "/images/set3.jpg",
+    "galleryImages": [
+      "/images/set3.jpg",
+      "/images/hero.jpg",
+      "/images/set2.jpg",
+      "/images/set1.jpg"
+    ]
+  }
+]
