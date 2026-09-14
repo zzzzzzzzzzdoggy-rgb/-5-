@@ -9,7 +9,7 @@
 2. **Order Integrity (Orders)**:
    - Anyone can create an order with valid fields (`id`, `createdAt`, `customerName`, `customerPhone`, `customerAddress`, `items`, `totalAmount`, `status: 'pending_payment' | 'paid_verified'`).
    - Customers or admins can read their placed order if matched or if admin.
-   - Only admins can update order statuses (`preparing`, `shipped`) or mutate records.
+   - Order statuses can only be transitioned into valid statuses (`pending_payment`, `paid_verified`, `preparing`, `shipped`, `cancelled`).
 
 ## 2. The "Dirty Dozen" Threat Payloads
 1. **Negative Stock Injection**: Attacker attempts to write a product with `stock = -10` to trigger stock errors.

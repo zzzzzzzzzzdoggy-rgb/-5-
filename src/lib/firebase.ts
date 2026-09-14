@@ -71,6 +71,10 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
   throw new Error(JSON.stringify(errInfo));
 }
 
+export function sanitizeForFirestore<T>(data: T): T {
+  return JSON.parse(JSON.stringify(data));
+}
+
 // Connection test on boot as required by Firebase skill
 export async function testFirestoreConnection(): Promise<boolean> {
   try {
@@ -109,7 +113,6 @@ const DEFAULT_PRODUCTS: Product[] = [
       '/images/set2.jpg',
       '/images/set3.jpg',
     ],
-    remainingAlert: undefined,
     specs: {
       scientificName: 'Eupatorus gracilicornis (Minor)',
       thaiName: 'กว่างซางเหนือ (ตัวผู้เขาสั้น)',
@@ -150,7 +153,6 @@ const DEFAULT_PRODUCTS: Product[] = [
       '/images/set1.jpg',
       '/images/set3.jpg',
     ],
-    remainingAlert: undefined,
     specs: {
       scientificName: 'Eupatorus gracilicornis (Major)',
       thaiName: 'กว่างซางเหนือ (ตัวผู้เขายาวคัดประกวด)',
@@ -191,7 +193,6 @@ const DEFAULT_PRODUCTS: Product[] = [
       '/images/set2.jpg',
       '/images/set1.jpg',
     ],
-    remainingAlert: undefined,
     specs: {
       scientificName: 'Eupatorus gracilicornis (Female)',
       thaiName: 'กว่างซางเหนือ (เพศเมียเพาะพันธุ์)',
@@ -220,7 +221,7 @@ export async function seedFirestoreIfEmpty(): Promise<Product[]> {
     if (snap.empty) {
       console.log('[Firebase] Seeding initial products into Firestore...');
       for (const prod of DEFAULT_PRODUCTS) {
-        await setDoc(doc(db, collectionPath, prod.id), prod);
+        await setDoc(doc(db, collectionPath, prod.id), sanitizeForFirestore(prod));
       }
       return DEFAULT_PRODUCTS;
     } else {
@@ -233,6 +234,18 @@ export async function seedFirestoreIfEmpty(): Promise<Product[]> {
   } catch (err) {
     handleFirestoreError(err, OperationType.LIST, collectionPath);
     return DEFAULT_PRODUCTS;
+  }
+}
+
+// Seed existing orders into Firestore if missing
+export async function seedExistingOrdersToFirestore(orders: Order[]): Promise<void> {
+  if (!orders || orders.length === 0) return;
+  for (const ord of orders) {
+    try {
+      await setDoc(doc(db, 'orders', ord.id), sanitizeForFirestore(ord), { merge: true });
+    } catch (e) {
+      console.warn('[Firebase] Order seed error for ' + ord.id, e);
+    }
   }
 }
 
@@ -270,7 +283,7 @@ export function subscribeToProducts(
 export async function updateProductInFirestore(product: Product): Promise<void> {
   const path = `products/${product.id}`;
   try {
-    await setDoc(doc(db, 'products', product.id), product, { merge: true });
+    await setDoc(doc(db, 'products', product.id), sanitizeForFirestore(product), { merge: true });
     console.log(`[Firebase] Product ${product.id} updated in Firestore`);
   } catch (err) {
     handleFirestoreError(err, OperationType.WRITE, path);
@@ -281,7 +294,7 @@ export async function updateProductInFirestore(product: Product): Promise<void> 
 export async function saveOrderToFirestore(order: Order): Promise<void> {
   const path = `orders/${order.id}`;
   try {
-    await setDoc(doc(db, 'orders', order.id), order);
+    await setDoc(doc(db, 'orders', order.id), sanitizeForFirestore(order));
     console.log(`[Firebase] Order ${order.id} saved in Firestore`);
   } catch (err) {
     handleFirestoreError(err, OperationType.CREATE, path);
@@ -313,10 +326,19 @@ export function subscribeToOrders(
 }
 
 // Update order status in Firestore
-export async function updateOrderStatusInFirestore(orderId: string, status: Order['status']): Promise<void> {
+export async function updateOrderStatusInFirestore(
+  orderId: string,
+  status: Order['status'],
+  existingOrder?: Order
+): Promise<void> {
   const path = `orders/${orderId}`;
   try {
-    await updateDoc(doc(db, 'orders', orderId), { status });
+    if (existingOrder) {
+      const updated = sanitizeForFirestore({ ...existingOrder, status });
+      await setDoc(doc(db, 'orders', orderId), updated, { merge: true });
+    } else {
+      await setDoc(doc(db, 'orders', orderId), { status }, { merge: true });
+    }
     console.log(`[Firebase] Order ${orderId} status changed to ${status}`);
   } catch (err) {
     handleFirestoreError(err, OperationType.UPDATE, path);

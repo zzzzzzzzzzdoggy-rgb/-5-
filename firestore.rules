@@ -41,11 +41,13 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
-    // Orders: Anyone can create an order; reading and managing orders for admin
+    // Orders: Anyone can create an order; reading and status update for orders
     match /orders/{orderId} {
       allow read: if true;
       allow create: if isValidOrder(request.resource.data);
-      allow update: if isAdmin() || (isValidOrder(request.resource.data) && request.resource.data.status in ['pending_payment', 'paid_verified', 'preparing', 'shipped']);
+      allow update: if request.resource.data.status is string &&
+                      request.resource.data.status.size() <= 50 &&
+                      request.resource.data.status in ['pending_payment', 'paid_verified', 'preparing', 'shipped', 'cancelled'];
       allow delete: if isAdmin();
     }
 

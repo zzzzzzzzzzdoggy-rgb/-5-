@@ -4,6 +4,7 @@ import {
   updateProductInFirestore,
   subscribeToOrders,
   updateOrderStatusInFirestore,
+  seedExistingOrdersToFirestore,
 } from '../lib/firebase';
 import {
   X,
@@ -117,8 +118,14 @@ export const AdminModal: React.FC<AdminModalProps> = ({
     try {
       const res = await fetch('/api/orders');
       const data = await res.json();
-      if (data.success) {
-        setOrders(data.orders || []);
+      if (data.success && data.orders) {
+        setOrders(data.orders);
+        // Sync any server orders to Firestore
+        try {
+          await seedExistingOrdersToFirestore(data.orders);
+        } catch (sErr) {
+          console.warn('[Firebase] Order sync warning:', sErr);
+        }
       }
     } catch (err) {
       console.error('Error fetching orders:', err);
@@ -365,8 +372,9 @@ export const AdminModal: React.FC<AdminModalProps> = ({
 
   const handleUpdateOrderStatus = async (orderId: string, status: Order['status']) => {
     try {
+      const targetOrder = orders.find((o) => o.id === orderId);
       try {
-        await updateOrderStatusInFirestore(orderId, status);
+        await updateOrderStatusInFirestore(orderId, status, targetOrder);
       } catch (fErr) {
         console.warn('[Firebase] Order status Firestore sync warning:', fErr);
       }
