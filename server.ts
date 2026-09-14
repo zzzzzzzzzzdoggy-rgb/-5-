@@ -206,11 +206,15 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
-  app.use(express.json({ limit: "20mb" }));
-  app.use(express.urlencoded({ extended: true, limit: "20mb" }));
+  app.use(express.json({ limit: "50mb" }));
+  app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 
   // Static uploads directory
+  if (!fs.existsSync(UPLOADS_DIR)) {
+    fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+  }
   app.use("/uploads", express.static(UPLOADS_DIR));
+  app.use("/public/uploads", express.static(UPLOADS_DIR));
 
   // API Routes
   app.get("/api/health", (_req, res) => {
@@ -232,26 +236,64 @@ async function startServer() {
   app.post("/api/upload-image", (req, res) => {
     try {
       const { image, name } = req.body;
-      if (!image) {
+      if (!image || typeof image !== "string") {
         return res.status(400).json({ success: false, message: "กรุณาเลือกไฟล์ภาพ" });
       }
 
-      // Check if it's base64 data
-      const matches = image.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
-      if (matches && matches.length === 3) {
-        const mimeType = matches[1];
-        const ext = mimeType.split("/")[1] || "jpg";
-        const cleanExt = ext === "jpeg" ? "jpg" : ext.replace(/[^a-zA-Z0-9]/g, "");
-        const buffer = Buffer.from(matches[2], "base64");
-        const safeName = (name || "beetle").replace(/[^a-zA-Z0-9_-]/g, "_");
-        const filename = `${safeName}-${Date.now()}-${Math.floor(Math.random() * 10000)}.${cleanExt}`;
-        const filepath = path.join(UPLOADS_DIR, filename);
-        fs.writeFileSync(filepath, buffer);
-        return res.json({ success: true, url: `/uploads/${filename}` });
+      // If it's already an external HTTP URL or existing /uploads path
+      if (image.startsWith("http://") || image.startsWith("https://") || image.startsWith("/uploads/")) {
+        return res.json({ success: true, url: image });
       }
 
-      // If it's already an HTTP URL or local path
-      return res.json({ success: true, url: image });
+      // Robust base64 extraction without risky regex backtracking
+      if (image.startsWith("data:image/")) {
+        const commaIndex = image.indexOf(",");
+        if (commaIndex !== -1) {
+          const metaPart = image.substring(5, commaIndex); // e.g. "image/png;base64"
+          const rawMime = metaPart.split(";")[0] || "image/jpeg";
+          const rawExt = rawMime.split("/")[1] || "jpg";
+          let cleanExt = rawExt.toLowerCase().replace(/[^a-z0-9]/g, "");
+          if (cleanExt === "jpeg") cleanExt = "jpg";
+          if (!cleanExt) cleanExt = "jpg";
+
+          const base64Data = image.substring(commaIndex + 1);
+          const buffer = Buffer.from(base64Data, "base64");
+          
+          if (buffer.length === 0) {
+            return res.status(400).json({ success: false, message: "ไฟล์รูปภาพไม่ถูกต้องหรือข้อมูลว่างเปล่า" });
+          }
+
+          const safeName = (name || "beetle").replace(/[^a-zA-Z0-9_-]/g, "_");
+          const filename = `${safeName}-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}.${cleanExt}`;
+          const filepath = path.join(UPLOADS_DIR, filename);
+
+          fs.writeFileSync(filepath, buffer);
+          console.log(`[Upload] Image saved successfully: ${filename} (${buffer.length} bytes)`);
+
+          return res.json({
+            success: true,
+            url: `/uploads/${filename}`,
+            filename,
+            size: buffer.length,
+          });
+        }
+      }
+
+      // If raw base64 without data: prefix
+      try {
+        const buffer = Buffer.from(image, "base64");
+        if (buffer.length > 50) {
+          const safeName = (name || "beetle").replace(/[^a-zA-Z0-9_-]/g, "_");
+          const filename = `${safeName}-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}.jpg`;
+          const filepath = path.join(UPLOADS_DIR, filename);
+          fs.writeFileSync(filepath, buffer);
+          return res.json({ success: true, url: `/uploads/${filename}` });
+        }
+      } catch (decodeErr) {
+        console.warn("[Upload] Raw decode attempt failed:", decodeErr);
+      }
+
+      return res.status(400).json({ success: false, message: "รูปแบบข้อมูลรูปภาพไม่ถูกต้อง" });
     } catch (err: any) {
       console.error("Upload error:", err);
       res.status(500).json({ success: false, message: err.message || "อัปโหลดภาพไม่สำเร็จ" });

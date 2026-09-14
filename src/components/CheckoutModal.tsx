@@ -3,6 +3,7 @@ import { CartItem, Coupon, Order } from '../types';
 import { X, QrCode, CreditCard, Upload, CheckCircle2, ShieldCheck, Clock, ArrowRight, Loader2, Copy } from 'lucide-react';
 import { CONTACT_INFO } from '../data/products';
 import { saveOrderToFirestore, updateProductInFirestore } from '../lib/firebase';
+import { optimizeImage } from '../utils/imageOptimizer';
 
 interface CheckoutModalProps {
   isOpen: boolean;
@@ -94,14 +95,25 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
     setStep('payment');
   };
 
-  const handleSlipUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleSlipUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onload = () => {
-        setSlipFile(reader.result as string);
-      };
-      reader.readAsDataURL(file);
+      try {
+        const opt = await optimizeImage(file, {
+          maxWidth: 1200,
+          maxHeight: 1600,
+          quality: 0.82,
+          mimeType: 'image/jpeg',
+        });
+        setSlipFile(opt.base64);
+      } catch (err) {
+        console.warn('[Checkout] Slip optimization fallback to raw reader:', err);
+        const reader = new FileReader();
+        reader.onload = () => {
+          setSlipFile(reader.result as string);
+        };
+        reader.readAsDataURL(file);
+      }
     }
   };
 

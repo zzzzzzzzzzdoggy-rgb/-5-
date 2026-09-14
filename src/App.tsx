@@ -141,7 +141,10 @@ export default function App() {
             const cur = map.get(sp.id) || sp;
             map.set(sp.id, {
               ...cur,
-              stock: sp.stock,
+              ...sp,
+              image: sp.image || cur.image,
+              galleryImages: (sp.galleryImages && sp.galleryImages.length > 0) ? sp.galleryImages : cur.galleryImages,
+              stock: sp.stock !== undefined ? sp.stock : cur.stock,
               price: sp.price ?? cur.price,
               originalPrice: sp.originalPrice ?? cur.originalPrice,
               remainingAlert: sp.remainingAlert ?? cur.remainingAlert,

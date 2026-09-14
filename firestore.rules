@@ -33,12 +33,11 @@ service cloud.firestore {
              data.status is string && data.status.size() <= 50;
     }
 
-    // Products catalog: Public read for storefront display; writes restricted to admin or server
+    // Products catalog: Public read for storefront display; writes allowed for valid product schema
     match /products/{productId} {
       allow read: if true;
-      allow create: if (isAdmin() || !isSignedIn()) && isValidProduct(request.resource.data);
-      allow update: if (isAdmin() || !isSignedIn()) && isValidProduct(request.resource.data);
-      allow delete: if isAdmin();
+      allow create, update: if isValidProduct(request.resource.data);
+      allow delete: if isAdmin() || !isSignedIn();
     }
 
     // Orders: Anyone can create an order; reading and status update for orders
