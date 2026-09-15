@@ -209,12 +209,68 @@ async function startServer() {
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 
-  // Static uploads directory
+  // Static uploads directory with cache optimization
   if (!fs.existsSync(UPLOADS_DIR)) {
     fs.mkdirSync(UPLOADS_DIR, { recursive: true });
   }
-  app.use("/uploads", express.static(UPLOADS_DIR));
-  app.use("/public/uploads", express.static(UPLOADS_DIR));
+  const staticUploadOptions = { maxAge: "30d", etag: true };
+  app.use("/uploads", express.static(UPLOADS_DIR, staticUploadOptions));
+  app.use("/public/uploads", express.static(UPLOADS_DIR, staticUploadOptions));
+
+  // Helper for saving an image buffer to disk asynchronously
+  async function saveBase64Image(image: string, name?: string): Promise<{ url: string; filename: string; size: number }> {
+    if (!image || typeof image !== "string") {
+      throw new Error("กรุณาเลือกไฟล์ภาพ");
+    }
+
+    // Already public URL
+    if (image.startsWith("http://") || image.startsWith("https://") || image.startsWith("/uploads/")) {
+      return { url: image, filename: "", size: 0 };
+    }
+
+    if (image.startsWith("data:image/")) {
+      const commaIndex = image.indexOf(",");
+      if (commaIndex !== -1) {
+        const metaPart = image.substring(5, commaIndex);
+        const rawMime = metaPart.split(";")[0] || "image/jpeg";
+        const rawExt = rawMime.split("/")[1] || "jpg";
+        let cleanExt = rawExt.toLowerCase().replace(/[^a-z0-9]/g, "");
+        if (cleanExt === "jpeg") cleanExt = "jpg";
+        if (!cleanExt) cleanExt = "jpg";
+
+        const base64Data = image.substring(commaIndex + 1);
+        const buffer = Buffer.from(base64Data, "base64");
+        if (buffer.length === 0) {
+          throw new Error("ไฟล์รูปภาพว่างเปล่า");
+        }
+
+        const safeName = (name || "beetle").replace(/[^a-zA-Z0-9_-]/g, "_");
+        const filename = `${safeName}-${Date.now()}-${Math.floor(1000 + Math.random() * 90000)}.${cleanExt}`;
+        const filepath = path.join(UPLOADS_DIR, filename);
+
+        await fs.promises.writeFile(filepath, buffer);
+        console.log(`[Upload] Image saved: ${filename} (${buffer.length} bytes)`);
+
+        return {
+          url: `/uploads/${filename}`,
+          filename,
+          size: buffer.length,
+        };
+      }
+    }
+
+    // Raw base64 fallback
+    const buffer = Buffer.from(image, "base64");
+    if (buffer.length > 50) {
+      const safeName = (name || "beetle").replace(/[^a-zA-Z0-9_-]/g, "_");
+      const filename = `${safeName}-${Date.now()}-${Math.floor(1000 + Math.random() * 90000)}.jpg`;
+      const filepath = path.join(UPLOADS_DIR, filename);
+      await fs.promises.writeFile(filepath, buffer);
+      return { url: `/uploads/${filename}`, filename, size: buffer.length };
+    }
+
+    throw new Error("รูปแบบข้อมูลรูปภาพไม่ถูกต้อง");
+  }
 
   // API Routes
   app.get("/api/health", (_req, res) => {
@@ -232,71 +288,51 @@ async function startServer() {
     res.json({ success: true, count: siteStats.visitorCount });
   });
 
-  // Upload image endpoint (supports base64 and returns public accessible URL)
-  app.post("/api/upload-image", (req, res) => {
+  // High-Speed Single Image Upload (Async non-blocking)
+  app.post("/api/upload-image", async (req, res) => {
     try {
       const { image, name } = req.body;
-      if (!image || typeof image !== "string") {
-        return res.status(400).json({ success: false, message: "กรุณาเลือกไฟล์ภาพ" });
-      }
-
-      // If it's already an external HTTP URL or existing /uploads path
-      if (image.startsWith("http://") || image.startsWith("https://") || image.startsWith("/uploads/")) {
-        return res.json({ success: true, url: image });
-      }
-
-      // Robust base64 extraction without risky regex backtracking
-      if (image.startsWith("data:image/")) {
-        const commaIndex = image.indexOf(",");
-        if (commaIndex !== -1) {
-          const metaPart = image.substring(5, commaIndex); // e.g. "image/png;base64"
-          const rawMime = metaPart.split(";")[0] || "image/jpeg";
-          const rawExt = rawMime.split("/")[1] || "jpg";
-          let cleanExt = rawExt.toLowerCase().replace(/[^a-z0-9]/g, "");
-          if (cleanExt === "jpeg") cleanExt = "jpg";
-          if (!cleanExt) cleanExt = "jpg";
-
-          const base64Data = image.substring(commaIndex + 1);
-          const buffer = Buffer.from(base64Data, "base64");
-          
-          if (buffer.length === 0) {
-            return res.status(400).json({ success: false, message: "ไฟล์รูปภาพไม่ถูกต้องหรือข้อมูลว่างเปล่า" });
-          }
-
-          const safeName = (name || "beetle").replace(/[^a-zA-Z0-9_-]/g, "_");
-          const filename = `${safeName}-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}.${cleanExt}`;
-          const filepath = path.join(UPLOADS_DIR, filename);
-
-          fs.writeFileSync(filepath, buffer);
-          console.log(`[Upload] Image saved successfully: ${filename} (${buffer.length} bytes)`);
-
-          return res.json({
-            success: true,
-            url: `/uploads/${filename}`,
-            filename,
-            size: buffer.length,
-          });
-        }
-      }
-
-      // If raw base64 without data: prefix
-      try {
-        const buffer = Buffer.from(image, "base64");
-        if (buffer.length > 50) {
-          const safeName = (name || "beetle").replace(/[^a-zA-Z0-9_-]/g, "_");
-          const filename = `${safeName}-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}.jpg`;
-          const filepath = path.join(UPLOADS_DIR, filename);
-          fs.writeFileSync(filepath, buffer);
-          return res.json({ success: true, url: `/uploads/${filename}` });
-        }
-      } catch (decodeErr) {
-        console.warn("[Upload] Raw decode attempt failed:", decodeErr);
-      }
-
-      return res.status(400).json({ success: false, message: "รูปแบบข้อมูลรูปภาพไม่ถูกต้อง" });
+      const result = await saveBase64Image(image, name);
+      return res.json({
+        success: true,
+        url: result.url,
+        filename: result.filename,
+        size: result.size,
+      });
     } catch (err: any) {
       console.error("Upload error:", err);
       res.status(500).json({ success: false, message: err.message || "อัปโหลดภาพไม่สำเร็จ" });
+    }
+  });
+
+  // High-Speed Batch Image Upload (Parallel multi-file processing)
+  app.post("/api/upload-images", async (req, res) => {
+    try {
+      const { images } = req.body; // Array of { image: string, name?: string }
+      if (!Array.isArray(images) || images.length === 0) {
+        return res.status(400).json({ success: false, message: "ไม่มีรูปภาพที่ส่งมา" });
+      }
+
+      const results = await Promise.all(
+        images.map(async (item: { image: string; name?: string }, idx: number) => {
+          try {
+            return await saveBase64Image(item.image, item.name || `img-${idx}`);
+          } catch (err) {
+            console.warn(`[BatchUpload] Item ${idx} failed:`, err);
+            // Fallback to client data URL if saving fails so data is not lost
+            return { url: item.image, filename: "", size: 0 };
+          }
+        })
+      );
+
+      return res.json({
+        success: true,
+        urls: results.map((r) => r.url),
+        results,
+      });
+    } catch (err: any) {
+      console.error("Batch upload error:", err);
+      res.status(500).json({ success: false, message: err.message || "อัปโหลดรูปภาพไม่สำเร็จ" });
     }
   });
 
