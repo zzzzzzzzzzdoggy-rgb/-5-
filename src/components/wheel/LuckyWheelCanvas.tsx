@@ -25,15 +25,17 @@ export const LuckyWheelCanvas: React.FC<LuckyWheelCanvasProps> = ({
 
   // Helper to calculate SVG pie slice arc path
   const getSlicePath = (index: number): string => {
+    // For 2 slots (180 deg), a tiny epsilon avoids SVG arc collinear floating-point precision issues
+    const safeAngle = totalSlots === 2 ? 179.99 : sliceAngle;
     const startAngle = (index * sliceAngle - 90) * (Math.PI / 180);
-    const endAngle = ((index + 1) * sliceAngle - 90) * (Math.PI / 180);
+    const endAngle = (index * sliceAngle + safeAngle - 90) * (Math.PI / 180);
 
     const x1 = center + radius * Math.cos(startAngle);
     const y1 = center + radius * Math.sin(startAngle);
     const x2 = center + radius * Math.cos(endAngle);
     const y2 = center + radius * Math.sin(endAngle);
 
-    const largeArcFlag = sliceAngle > 180 ? 1 : 0;
+    const largeArcFlag = safeAngle > 180 ? 1 : 0;
 
     return `M ${center} ${center} L ${x1} ${y1} A ${radius} ${radius} 0 ${largeArcFlag} 1 ${x2} ${y2} Z`;
   };

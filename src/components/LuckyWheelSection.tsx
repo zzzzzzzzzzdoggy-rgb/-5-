@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   Sparkles,
   Trophy,
@@ -10,6 +10,7 @@ import {
   CheckCircle2,
   Flame,
   ArrowRight,
+  Percent,
 } from 'lucide-react';
 import { WheelSet, WheelSlot, SpinHistoryItem, DEFAULT_WHEEL_SETS } from '../types/wheel';
 import { LuckyWheelCanvas } from './wheel/LuckyWheelCanvas';
@@ -17,7 +18,7 @@ import { WheelResultModal } from './wheel/WheelResultModal';
 import { WheelSettingsModal } from './wheel/WheelSettingsModal';
 import { wheelAudio } from '../utils/wheelAudio';
 
-const STORAGE_KEY = 'eupatorus_lucky_wheel_sets_v2';
+const STORAGE_KEY = 'eupatorus_lucky_wheel_sets_v3';
 const HISTORY_STORAGE_KEY = 'eupatorus_lucky_wheel_history';
 
 // Mock live ticker for atmospheric casino/arcade excitement
@@ -61,6 +62,39 @@ export const LuckyWheelSection: React.FC = () => {
   });
 
   const currentSet = wheelSets.find((s) => s.id === activeSetId) || wheelSets[0];
+
+  // Real-time Grouped probability calculation (ปรับเปอร์ออโต้ Real-time Display)
+  const probabilityStats = useMemo(() => {
+    const total = currentSet.slots.length;
+    if (total === 0) return [];
+
+    const map = new Map<string, { label: string; count: number; isBeetle: boolean; color: string }>();
+    currentSet.slots.forEach((s) => {
+      const key = s.isBeetle ? '__BEETLE_JACKPOT__' : s.label.trim();
+      const existing = map.get(key);
+      if (existing) {
+        existing.count += 1;
+      } else {
+        map.set(key, {
+          label: s.label,
+          count: 1,
+          isBeetle: s.isBeetle,
+          color: s.isBeetle ? '#F59E0B' : s.color || '#10B981',
+        });
+      }
+    });
+
+    return Array.from(map.values()).map((item) => {
+      const percentVal = (item.count / total) * 100;
+      return {
+        ...item,
+        percentage: percentVal.toFixed(1),
+        percentageNumber: percentVal,
+        exactRatio: `${item.count}/${total}`,
+      };
+    });
+  }, [currentSet.slots]);
+
   const audioIntervalRef = useRef<any>(null);
 
   // Save updated sets
@@ -326,7 +360,53 @@ export const LuckyWheelSection: React.FC = () => {
                 </div>
                 <div className="p-2.5 rounded-xl bg-zinc-950/80 border border-zinc-800 text-center">
                   <span className="block text-[10px] text-zinc-400 uppercase">โอกาสได้ด้วง</span>
-                  <span className="text-sm font-bold text-amber-400 font-mono">{beetleProbability}% (1/{currentSet.slots.length})</span>
+                  <span className="text-sm font-bold text-amber-400 font-mono">{beetleProbability}% ({beetleSlotCount}/{currentSet.slots.length})</span>
+                </div>
+              </div>
+
+              {/* Auto Probability Ratio Bar & Breakdown */}
+              <div className="p-3 rounded-2xl bg-zinc-950/70 border border-zinc-800/90 space-y-2">
+                <div className="flex items-center justify-between text-[11px]">
+                  <span className="text-zinc-400 font-medium flex items-center gap-1">
+                    <Percent className="w-3 h-3 text-emerald-400" />
+                    <span>สัดส่วนรางวัลคำนวณออโต้ (100%)</span>
+                  </span>
+                  <span className="text-zinc-500 font-mono text-[10px]">
+                    ช่องละ {(100 / currentSet.slots.length).toFixed(1)}%
+                  </span>
+                </div>
+
+                {/* Color-coded horizontal ratio bar */}
+                <div className="w-full h-2 rounded-full bg-zinc-800 overflow-hidden flex shadow-inner">
+                  {probabilityStats.map((item, idx) => (
+                    <div
+                      key={idx}
+                      style={{
+                        width: `${item.percentageNumber}%`,
+                        backgroundColor: item.color,
+                      }}
+                      className="h-full transition-all duration-300"
+                      title={`${item.label}: ${item.percentage}%`}
+                    />
+                  ))}
+                </div>
+
+                {/* Prize Chance Pills */}
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  {probabilityStats.map((item, idx) => (
+                    <span
+                      key={idx}
+                      className={`text-[10px] px-2 py-0.5 rounded-md border flex items-center gap-1 font-medium ${
+                        item.isBeetle
+                          ? 'bg-amber-500/15 border-amber-500/40 text-amber-300 font-bold'
+                          : 'bg-zinc-900 border-zinc-700/60 text-zinc-300'
+                      }`}
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: item.color }} />
+                      <span>{item.label}</span>
+                      <span className="font-mono text-zinc-400">({item.percentage}%)</span>
+                    </span>
+                  ))}
                 </div>
               </div>
 
