@@ -21,6 +21,7 @@ import { AdminModal } from './components/AdminModal';
 import { AdminPinModal } from './components/AdminPinModal';
 import { ShareModal } from './components/ShareModal';
 import { FAQSection } from './components/FAQSection';
+import { LuckyWheelSection } from './components/LuckyWheelSection';
 import { Footer } from './components/Footer';
 import { FloatingSpeedDial } from './components/FloatingSpeedDial';
 import { Sparkles, CheckCircle, AlertCircle, RefreshCw } from 'lucide-react';
@@ -367,6 +368,9 @@ export default function App() {
 
       {/* FAQ Section */}
       <FAQSection />
+
+      {/* วงล้อหมุนสุ่มลุ้นด้วง (Lucky Beetle Wheel) */}
+      <LuckyWheelSection />
 
       {/* Footer */}
       <Footer />

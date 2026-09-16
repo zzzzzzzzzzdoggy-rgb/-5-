@@ -73,6 +73,12 @@ export const Navbar: React.FC<NavbarProps> = ({
           <a href="#faq" className="hover:text-white transition-colors">
             คำถามที่พบบ่อย
           </a>
+          <a
+            href="#lucky-wheel"
+            className="hover:text-amber-400 transition-colors text-amber-400 font-semibold flex items-center gap-1 bg-amber-500/10 px-2.5 py-1 rounded-full border border-amber-500/25"
+          >
+            <span>🪲 วงล้อลุ้นด้วง</span>
+          </a>
         </div>
 
         {/* Actions */}
