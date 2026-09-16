@@ -1,9 +1,26 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { CartItem, Coupon, Order } from '../types';
-import { X, QrCode, CreditCard, Upload, CheckCircle2, ShieldCheck, Clock, ArrowRight, Loader2, Copy } from 'lucide-react';
+import {
+  X,
+  QrCode,
+  CreditCard,
+  Upload,
+  CheckCircle2,
+  ShieldCheck,
+  Clock,
+  ArrowRight,
+  Loader2,
+  Copy,
+  Eye,
+  Trash2,
+  ZoomIn,
+  RefreshCw,
+  Camera,
+  Image as ImageIcon,
+} from 'lucide-react';
 import { CONTACT_INFO } from '../data/products';
 import { saveOrderToFirestore, updateProductInFirestore } from '../lib/firebase';
-import { optimizeImage } from '../utils/imageOptimizer';
+import { optimizeImage, formatFileSize } from '../utils/imageOptimizer';
 
 interface CheckoutModalProps {
   isOpen: boolean;
@@ -31,6 +48,13 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   // Payment State
   const [paymentMethod, setPaymentMethod] = useState<'promptpay' | 'credit_card' | 'line'>('promptpay');
   const [slipFile, setSlipFile] = useState<string | null>(null);
+  const slipBase64Ref = useRef<string | null>(null);
+  const [slipFileName, setSlipFileName] = useState<string>('');
+  const [slipFileSize, setSlipFileSize] = useState<string>('');
+  const [isUploadingSlip, setIsUploadingSlip] = useState(false);
+  const [isSlipDragging, setIsSlipDragging] = useState(false);
+  const [slipPreviewZoom, setSlipPreviewZoom] = useState(false);
+  const slipInputRef = useRef<HTMLInputElement>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   
@@ -95,24 +119,90 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
     setStep('payment');
   };
 
-  const handleSlipUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const processSlipFile = async (file: File) => {
+    if (!file) return;
+    setIsUploadingSlip(true);
+    setErrorMessage('');
+    setSlipFileName(file.name || 'transfer-slip.jpg');
+
+    // 0ms zero-latency instant preview
+    const instantUrl = URL.createObjectURL(file);
+    setSlipFile(instantUrl);
+
+    try {
+      const opt = await optimizeImage(file, {
+        maxWidth: 1400,
+        maxHeight: 1800,
+        quality: 0.84,
+        mimeType: 'image/jpeg',
+      });
+      slipBase64Ref.current = opt.base64;
+      setSlipFileSize(formatFileSize(opt.optimizedSize));
+
+      let finalUrl = opt.base64;
+      try {
+        const res = await fetch('/api/upload-image', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            image: opt.base64,
+            name: `slip-${Date.now()}`,
+          }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success && data.url) {
+            finalUrl = data.url;
+          }
+        }
+      } catch (uploadErr) {
+        console.warn('[Slip] Upload endpoint warning, using base64:', uploadErr);
+      }
+
+      setSlipFile(finalUrl);
+    } catch (err: any) {
+      console.warn('[Checkout] Slip optimization fallback:', err);
+      const reader = new FileReader();
+      reader.onload = () => {
+        if (typeof reader.result === 'string') {
+          slipBase64Ref.current = reader.result;
+          setSlipFile(reader.result);
+        }
+      };
+      reader.readAsDataURL(file);
+    } finally {
+      setIsUploadingSlip(false);
+      if (slipInputRef.current) slipInputRef.current.value = '';
+    }
+  };
+
+  const handleSlipUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      try {
-        const opt = await optimizeImage(file, {
-          maxWidth: 1200,
-          maxHeight: 1600,
-          quality: 0.82,
-          mimeType: 'image/jpeg',
-        });
-        setSlipFile(opt.base64);
-      } catch (err) {
-        console.warn('[Checkout] Slip optimization fallback to raw reader:', err);
-        const reader = new FileReader();
-        reader.onload = () => {
-          setSlipFile(reader.result as string);
-        };
-        reader.readAsDataURL(file);
+      processSlipFile(file);
+    }
+  };
+
+  const handleSlipDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsSlipDragging(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) {
+      processSlipFile(file);
+    }
+  };
+
+  const handleSlipPaste = (e: React.ClipboardEvent) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].type.indexOf('image') !== -1) {
+        const file = items[i].getAsFile();
+        if (file) {
+          e.preventDefault();
+          processSlipFile(file);
+          break;
+        }
       }
     }
   };
@@ -122,6 +212,10 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
     setErrorMessage('');
 
     try {
+      const resolvedSlip = (slipFile && slipFile.startsWith('blob:'))
+        ? (slipBase64Ref.current || undefined)
+        : (slipFile || undefined);
+
       const payload = {
         customerName: name,
         customerPhone: phone,
@@ -140,7 +234,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
         shippingFee,
         totalAmount,
         couponCode: appliedCoupon?.code,
-        slipImage: slipFile || undefined,
+        slipImage: resolvedSlip,
       };
 
       let orderToSave: Order | null = null;
@@ -177,14 +271,15 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
             name: it.product.name,
             price: it.product.price,
             quantity: it.quantity,
+            image: it.product.image,
           })),
           subtotal,
           discountAmount,
           shippingFee,
           totalAmount,
           couponCode: appliedCoupon?.code,
-          slipImage: slipFile || undefined,
-          status: slipFile ? 'paid_verified' : (paymentMethod === 'line' ? 'pending_payment' : 'paid_verified'),
+          slipImage: resolvedSlip,
+          status: resolvedSlip ? 'paid_verified' : (paymentMethod === 'line' ? 'pending_payment' : 'paid_verified'),
         };
       }
 
@@ -468,31 +563,133 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                   <p>เบอร์พร้อมเพย์: <span className="text-emerald-400 font-mono font-bold">093-928-0599</span></p>
                 </div>
 
-                {/* Slip Upload */}
-                <div className="w-full pt-2 border-t border-zinc-800">
-                  <label className="block text-xs font-medium text-zinc-300 mb-2">
-                    แนบสลิปโอนเงิน (เพื่อตรวจสอบและตัดสต็อกทันที):
-                  </label>
-                  <label className="flex flex-col items-center justify-center border-2 border-dashed border-zinc-700 hover:border-emerald-500 rounded-xl p-4 cursor-pointer bg-zinc-950/60 transition-colors">
-                    {slipFile ? (
-                      <div className="flex items-center gap-2 text-emerald-400 text-xs">
-                        <CheckCircle2 className="w-4 h-4" />
-                        <span>แนบสลิปเรียบร้อยแล้ว</span>
+                {/* Slip Upload & Verification Preview */}
+                <div
+                  className="w-full pt-3 border-t border-zinc-800 text-left space-y-2"
+                  onPaste={handleSlipPaste}
+                >
+                  <div className="flex items-center justify-between">
+                    <label className="block text-xs font-medium text-zinc-300">
+                      แนบสลิปโอนเงิน (เพื่อตรวจสอบและตัดสต็อกทันที):
+                    </label>
+                    <span className="text-[10px] text-zinc-500 font-mono">
+                      (วางรูป / ลากไฟล์ / กดแนบ)
+                    </span>
+                  </div>
+
+                  <input
+                    type="file"
+                    ref={slipInputRef}
+                    accept="image/*"
+                    onClick={(e) => {
+                      (e.target as HTMLInputElement).value = '';
+                    }}
+                    onChange={handleSlipUpload}
+                    className="hidden"
+                  />
+
+                  {/* If Slip Uploading State */}
+                  {isUploadingSlip ? (
+                    <div className="p-4 rounded-xl border border-emerald-500/50 bg-zinc-950/80 flex items-center justify-center gap-3 text-xs text-emerald-400">
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      <span>กำลังปรับแต่งความคมชัดและประมวลผลสลิป...</span>
+                    </div>
+                  ) : slipFile ? (
+                    /* Attached Slip Preview Card */
+                    <div className="p-3 rounded-xl border border-emerald-500/40 bg-zinc-950/90 flex items-center justify-between gap-3 shadow-lg shadow-emerald-500/5">
+                      <div className="flex items-center gap-3 min-w-0">
+                        {/* Thumbnail with Zoom overlay */}
+                        <div
+                          onClick={() => setSlipPreviewZoom(true)}
+                          className="relative w-16 h-16 rounded-lg overflow-hidden border border-emerald-500/50 bg-black flex-shrink-0 cursor-pointer group/thumb shadow-sm"
+                          title="คลิกเพื่อดูรูปสลิปขนาดเต็ม"
+                        >
+                          <img
+                            src={slipFile}
+                            alt="Slip Receipt"
+                            referrerPolicy="no-referrer"
+                            className="w-full h-full object-cover group-hover/thumb:scale-105 transition-transform"
+                          />
+                          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/thumb:opacity-100 transition-opacity flex items-center justify-center text-white">
+                            <ZoomIn className="w-4 h-4" />
+                          </div>
+                        </div>
+
+                        {/* Slip Metadata */}
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-1.5 text-emerald-400 text-xs font-semibold">
+                            <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0" />
+                            <span className="truncate">แนบสลิปเรียบร้อยแล้ว</span>
+                          </div>
+                          <p className="text-[11px] text-zinc-400 truncate mt-0.5 font-mono">
+                            {slipFileName || 'transfer-slip.jpg'} {slipFileSize ? `(${slipFileSize})` : ''}
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => setSlipPreviewZoom(true)}
+                            className="text-[10px] text-emerald-400 hover:text-emerald-300 underline mt-0.5 inline-flex items-center gap-1 cursor-pointer"
+                          >
+                            <Eye className="w-3 h-3" />
+                            <span>คลิกดูรูปขยาย (ตรวจสอบความถูกต้อง)</span>
+                          </button>
+                        </div>
                       </div>
-                    ) : (
-                      <div className="flex flex-col items-center gap-1 text-zinc-400 text-xs">
-                        <Upload className="w-5 h-5 text-emerald-400" />
-                        <span>คลิกเพื่ออัปโหลดสลิปหลักฐานการโอน</span>
-                        <span className="text-[10px] text-zinc-600">(JPG, PNG)</span>
+
+                      {/* Action buttons */}
+                      <div className="flex items-center gap-1.5 flex-shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => slipInputRef.current?.click()}
+                          className="px-2.5 py-1.5 text-xs text-zinc-300 hover:text-white bg-zinc-800/80 hover:bg-zinc-700 rounded-lg transition-colors flex items-center gap-1 cursor-pointer"
+                          title="เลือกรูปสลิปใหม่"
+                        >
+                          <Camera className="w-3.5 h-3.5 text-emerald-400" />
+                          <span className="hidden sm:inline">เปลี่ยน</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSlipFile(null);
+                            setSlipFileName('');
+                            setSlipFileSize('');
+                          }}
+                          className="p-1.5 text-zinc-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors cursor-pointer"
+                          title="ลบสลิปนี้"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
                       </div>
-                    )}
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={handleSlipUpload}
-                      className="hidden"
-                    />
-                  </label>
+                    </div>
+                  ) : (
+                    /* Dropzone & Upload Button */
+                    <div
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        setIsSlipDragging(true);
+                      }}
+                      onDragLeave={(e) => {
+                        e.preventDefault();
+                        setIsSlipDragging(false);
+                      }}
+                      onDrop={handleSlipDrop}
+                      onClick={() => slipInputRef.current?.click()}
+                      className={`border-2 border-dashed rounded-xl p-4 text-center cursor-pointer transition-all duration-200 flex flex-col items-center justify-center gap-1.5 ${
+                        isSlipDragging
+                          ? 'border-emerald-400 bg-emerald-500/15 scale-[1.01]'
+                          : 'border-zinc-700 hover:border-emerald-500 bg-zinc-950/60 hover:bg-zinc-950/90'
+                      }`}
+                    >
+                      <div className="w-8 h-8 rounded-full bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+                        <Upload className="w-4 h-4" />
+                      </div>
+                      <div className="text-xs text-zinc-300 font-medium">
+                        คลิกเพื่ออัปโหลดสลิป หรือ ลากไฟล์รูปมาวางที่นี่
+                      </div>
+                      <p className="text-[10px] text-zinc-500">
+                        รองรับ JPG, PNG, ภาพแคปหน้าจอ หรือกด <kbd className="px-1 py-0.5 bg-zinc-800 rounded text-zinc-300 font-mono">Ctrl+V</kbd> วางรูปได้ทันที
+                      </p>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -655,6 +852,56 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
         )}
 
       </div>
+
+      {/* Slip Zoom Fullscreen Preview Modal */}
+      {slipPreviewZoom && slipFile && (
+        <div
+          onClick={() => setSlipPreviewZoom(false)}
+          className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-md flex flex-col items-center justify-center p-4 animate-in fade-in duration-200"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="relative max-w-xl max-h-[90vh] bg-zinc-950 border border-emerald-500/50 rounded-2xl overflow-hidden shadow-2xl flex flex-col"
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between px-4 py-3 bg-zinc-900 border-b border-zinc-800">
+              <div className="flex items-center gap-2 text-white text-xs font-semibold">
+                <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                <span>ตรวจสอบสลิปโอนเงิน (Slip Preview)</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSlipPreviewZoom(false)}
+                className="p-1.5 text-zinc-400 hover:text-white rounded-lg hover:bg-zinc-800 transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Image Container */}
+            <div className="p-2 overflow-auto max-h-[75vh] flex items-center justify-center bg-zinc-900/50">
+              <img
+                src={slipFile}
+                alt="Enlarged Slip Receipt"
+                referrerPolicy="no-referrer"
+                className="max-w-full max-h-full object-contain rounded-lg shadow-md"
+              />
+            </div>
+
+            {/* Footer */}
+            <div className="px-4 py-2.5 bg-zinc-900 border-t border-zinc-800 flex items-center justify-between text-[11px] text-zinc-400">
+              <span className="truncate font-mono">{slipFileName || 'transfer-slip.jpg'} {slipFileSize ? `• ${slipFileSize}` : ''}</span>
+              <button
+                type="button"
+                onClick={() => setSlipPreviewZoom(false)}
+                className="px-3 py-1 bg-emerald-500 text-black font-bold rounded-lg text-xs hover:bg-emerald-400 transition-colors cursor-pointer"
+              >
+                ปิดหน้าต่าง
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

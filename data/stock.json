@@ -7,17 +7,35 @@
     "price": 399,
     "originalPrice": 499,
     "stock": 6,
-    "remainingAlert": "เหลือน้อย • พร้อมจัดส่ง",
     "badge": "Ready To Display",
     "isBestSeller": false,
     "description": "เซ็ตของขวัญพร้อมตั้งโชว์ (Ready-to-display) บรรจุในถุงกระดาษหน้าต่างใสผูกโบว์สีทองสุดหรู ภายในครบจบ: เปลือกไม้ ขี้เลื่อย อ้อย และเยลลี่ นำไปตั้งโชว์ประดับห้องได้ทันที ดูแลรักษาง่ายเพียงแค่คอยเปลี่ยนอาหาร",
     "longDescription": "กว่างซางเหนือเพศผู้ฟอร์มเขาสั้น (Minor Form) โครงสร้างบึกบึน แข็งแรง ว่องไว อายุยืนยาว จุดเด่นคือจัดมาเป็นเซ็ตของขวัญสำเร็จรูปพร้อมเคสใสโชว์และวัสดุรองพื้นครบชุด",
-    "image": "/images/set1.jpg",
+    "image": "/images/set1_short_2.jpg",
     "galleryImages": [
-      "/images/set1.jpg",
-      "/images/hero.jpg",
-      "/images/set2.jpg",
-      "/images/set3.jpg"
+      "/images/set1_short_1.jpg",
+      "/images/set1_short_2.jpg",
+      "/images/set1_short_3.jpg"
+    ],
+    "specs": {
+      "humidity": "65% - 75%",
+      "scientificName": "Eupatorus gracilicornis",
+      "size": "55 - 65 mm (Medium Size)",
+      "diet": "เยลลี่โปรตีนสำหรับด้วง, อ้อยหวาน, กล้วยน้ำว้า",
+      "origin": "ดอยสูงภาคเหนือ (เชียงใหม่/แม่ฮ่องสอน) 1,400m+ ASL",
+      "temperature": "22°C - 26°C (ชอบอากาศเย็นโปร่ง)",
+      "thaiName": "กว่างซางเหนือ (ด้วง 5 เขา)",
+      "hornCount": 5,
+      "lifespan": "2 - 4 เดือน ในวัยตัวเต็มวัย"
+    },
+    "inBoxIncludes": [
+      "ด้วงกว่างซางเหนือเพศผู้ (เขาสั้น) 1 ตัว สมบูรณ์ 100%",
+      "กล่องอะคริลิคใสระบายอากาศเกรดพรีเมียม",
+      "ถุงของขวัญหน้าต่างใสผูกโบว์ซาตินสีทองหรูหรา",
+      "ท่อนไม้ธรรมชาติขัดเสี้ยน & เปลือกไม้รองนอน",
+      "ขี้เลื่อยหมักสูตรธรรมชาติ (Substrate) ปลอดสารเคมี",
+      "คู่มือการเลี้ยงแบบเร่งรัด & บัตรรับประกัน Live Arrival",
+      "✓ ท่อนอ้อยสดตัดแต่ง + เยลลี่โปรตีนพรีเมียม 1 ถ้วย"
     ]
   },
   {
@@ -33,12 +51,12 @@
     "isBestSeller": true,
     "description": "เกรดคัดพิเศษ เขายาวเรียวสวยงาม ครบ 5 แฉกสมบูรณ์แบบ ไซส์ใหญ่ ฟอร์มประกวด โดดเด่นที่สุด สง่างามสมศักดิ์ศรีราชันย์แห่งขุนเขา",
     "longDescription": "กว่างซางเหนือเพศผู้ฟอร์มเขายาวพิเศษ (Major Form) สุดยอดความภูมิใจของนักสะสมแมลงปีกแข็งระดับประเทศ คัดเฉพาะตัวที่มีเขาหน้าผากยาวโค้งได้องศาได้สัดส่วนทองคำ",
-    "image": "/images/set2.jpg",
+    "image": "/images/สั้นยาว ใหญ่.jfif",
     "galleryImages": [
-      "/images/set2.jpg",
-      "/images/hero.jpg",
-      "/images/set1.jpg",
-      "/images/set3.jpg"
+      "/images/สั้นยาว ใหญ่.jfif",
+      "/images/Gemini_Generated_Image_9px4ih9px4ih9px4.jfif",
+      "/images/ยาว3.jfif",
+      "/images/ยาว4.jfif"
     ]
   },
   {

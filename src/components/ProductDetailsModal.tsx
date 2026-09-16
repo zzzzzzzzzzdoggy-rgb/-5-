@@ -44,6 +44,11 @@ export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
               src={product.image}
               alt={product.name}
               referrerPolicy="no-referrer"
+              onError={(e) => {
+                const target = e.currentTarget;
+                target.onerror = null;
+                target.src = '/images/hero.jpg';
+              }}
               className="w-full h-full object-cover"
             />
             <button
@@ -51,17 +56,17 @@ export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
                 onClose();
                 onOpenGallery(product);
               }}
-              className="absolute bottom-2 right-2 bg-black/70 hover:bg-black text-white text-[10px] px-2 py-1 rounded-md flex items-center gap-1 border border-white/20"
+              className="absolute bottom-2 right-2 bg-black/70 hover:bg-black text-white text-[10px] px-2 py-1 rounded-md flex items-center gap-1 border border-white/20 cursor-pointer"
             >
               <Eye className="w-3 h-3" />
-              10 รูป
+              <span>{product.galleryImages?.length || 10} รูป</span>
             </button>
           </div>
 
           <div className="flex-1">
             <div className="flex items-center gap-2 mb-1">
               <span className="text-emerald-400 text-xs font-mono uppercase tracking-wider">
-                {product.specs.scientificName}
+                {product.specs?.scientificName || 'Eupatorus gracilicornis'}
               </span>
               {product.badge && (
                 <span className="px-2.5 py-0.5 bg-amber-500/15 text-amber-300 text-[10px] font-bold rounded-full border border-amber-500/30">
@@ -91,7 +96,7 @@ export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
             <span>อุปกรณ์และสิ่งที่จะได้รับในเซ็ต:</span>
           </h3>
           <ul className="space-y-2 text-xs text-zinc-300">
-            {product.inBoxIncludes.map((item, i) => (
+            {(product.inBoxIncludes || []).map((item, i) => (
               <li key={i} className="flex items-start gap-2">
                 <Check className="w-4 h-4 text-[#00B900] flex-shrink-0 mt-0.5" />
                 <span>{item}</span>
@@ -106,27 +111,27 @@ export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
           <div className="grid grid-cols-2 gap-2.5 text-xs">
             <div className="p-3 bg-zinc-900/40 rounded-xl border border-zinc-800/80">
               <span className="text-zinc-500 block mb-0.5">ชื่อไทย</span>
-              <span className="text-zinc-200 font-medium">{product.specs.thaiName}</span>
+              <span className="text-zinc-200 font-medium">{product.specs?.thaiName || 'กว่างซางเหนือ 5 เขา'}</span>
             </div>
             <div className="p-3 bg-zinc-900/40 rounded-xl border border-zinc-800/80">
               <span className="text-zinc-500 block mb-0.5">ขนาดตัว</span>
-              <span className="text-amber-200 font-medium">{product.specs.size}</span>
+              <span className="text-amber-200 font-medium">{product.specs?.size || 'เกรดพรีเมียม'}</span>
             </div>
             <div className="p-3 bg-zinc-900/40 rounded-xl border border-zinc-800/80">
               <span className="text-zinc-500 block mb-0.5">จำนวนเขา</span>
-              <span className="text-zinc-200 font-medium">{product.specs.hornCount} แฉก</span>
+              <span className="text-zinc-200 font-medium">{product.specs?.hornCount ?? 5} แฉก</span>
             </div>
             <div className="p-3 bg-zinc-900/40 rounded-xl border border-zinc-800/80">
               <span className="text-zinc-500 block mb-0.5">อุณหภูมิที่เหมาะสม</span>
-              <span className="text-emerald-300 font-medium">{product.specs.temperature}</span>
+              <span className="text-emerald-300 font-medium">{product.specs?.temperature || '22°C - 26°C'}</span>
             </div>
             <div className="p-3 bg-zinc-900/40 rounded-xl border border-zinc-800/80">
               <span className="text-zinc-500 block mb-0.5">อาหารหลัก</span>
-              <span className="text-zinc-200 font-medium">{product.specs.diet}</span>
+              <span className="text-zinc-200 font-medium">{product.specs?.diet || 'เยลลี่แมลงโปรตีนสูง'}</span>
             </div>
             <div className="p-3 bg-zinc-900/40 rounded-xl border border-zinc-800/80">
               <span className="text-zinc-500 block mb-0.5">ถิ่นกำเนิด</span>
-              <span className="text-zinc-200 font-medium">{product.specs.origin}</span>
+              <span className="text-zinc-200 font-medium">{product.specs?.origin || 'ดอยสูงภาคเหนือของไทย'}</span>
             </div>
           </div>
         </div>
@@ -138,9 +143,9 @@ export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
               onClose();
               onOpenGallery(product);
             }}
-            className="flex-1 py-3.5 bg-zinc-800 hover:bg-zinc-700 text-white rounded-xl text-xs font-semibold uppercase tracking-wider transition-colors"
+            className="flex-1 py-3.5 bg-zinc-800 hover:bg-zinc-700 text-white rounded-xl text-xs font-semibold uppercase tracking-wider transition-colors cursor-pointer"
           >
-            ดูภาพ 10 มุมมอง
+            ดูภาพแกลเลอรี ({product.galleryImages?.length || 10} ภาพ)
           </button>
           <button
             onClick={() => {

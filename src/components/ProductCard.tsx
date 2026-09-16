@@ -73,7 +73,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
         <div className="absolute inset-0 z-30 bg-black/40 opacity-0 group-hover/img:opacity-100 transition-opacity duration-300 flex items-center justify-center pointer-events-none">
           <span className="text-white text-[11px] tracking-[0.2em] uppercase border border-white/30 px-4 py-2 rounded-full backdrop-blur-md bg-black/50 flex items-center gap-2 shadow-2xl">
             <ImageIcon className="w-4 h-4 text-emerald-400" />
-            <span>View 10 Photos</span>
+            <span>View {product.galleryImages?.length || 10} Photos</span>
           </span>
         </div>
 
@@ -81,6 +81,11 @@ export const ProductCard: React.FC<ProductCardProps> = ({
           src={product.image}
           alt={product.name}
           referrerPolicy="no-referrer"
+          onError={(e) => {
+            const target = e.currentTarget;
+            target.onerror = null;
+            target.src = '/images/hero.jpg';
+          }}
           className="w-full h-full object-cover opacity-90 group-hover:opacity-100 transition-transform duration-700 group-hover:scale-105 relative z-10"
         />
         <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/25 to-transparent opacity-85 pointer-events-none z-20"></div>
@@ -88,7 +93,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
         {/* Small photo indicator chip */}
         <div className="absolute bottom-3 left-3 z-30 bg-black/60 backdrop-blur-md px-2.5 py-1 rounded-md text-[10px] text-zinc-300 font-mono flex items-center gap-1">
           <Eye className="w-3 h-3 text-emerald-400" />
-          <span>10 ภาพมุมมอง</span>
+          <span>{product.galleryImages?.length || 10} ภาพมุมมอง</span>
         </div>
       </div>
 

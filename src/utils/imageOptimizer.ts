@@ -68,16 +68,16 @@ export async function optimizeImage(
     mimeType = 'image/jpeg',
   } = options;
 
-  // 1. Validate file type
-  const isImageMime = file.type && file.type.startsWith('image/');
-  const isImageExt = /\.(jpe?g|png|webp|gif|bmp|heic|heif|jfif|avif|svg)$/i.test(file.name || '');
+  // 1. Validate file type (friendly to mobile cameras and screenshots)
+  const isImageMime = !file.type || file.type.startsWith('image/') || file.type === 'application/octet-stream';
+  const isImageExt = !file.name || /\.(jpe?g|png|webp|gif|bmp|heic|heif|jfif|avif|svg)$/i.test(file.name || '') || !file.name.includes('.');
 
-  if (!isImageMime && !isImageExt && file.type !== '') {
+  if (!isImageMime && !isImageExt) {
     throw new Error('กรุณาเลือกไฟล์ที่เป็นรูปภาพเท่านั้น (รองรับ JPG, PNG, WebP, GIF)');
   }
 
   // Determine target mime type
-  const isPng = file.type === 'image/png' || file.name.toLowerCase().endsWith('.png');
+  const isPng = file.type === 'image/png' || (file.name && file.name.toLowerCase().endsWith('.png'));
   const targetMime = isPng && mimeType === 'image/png' ? 'image/png' : mimeType;
 
   // Strategy 1: High-Speed Native createImageBitmap (Hardware GPU accelerated)
@@ -100,7 +100,7 @@ export async function optimizeImage(
 
         if (ctx) {
           if (targetMime === 'image/jpeg') {
-            ctx.fillStyle = '#09090b';
+            ctx.fillStyle = '#ffffff';
             ctx.fillRect(0, 0, width, height);
           }
 
@@ -175,7 +175,7 @@ export async function optimizeImage(
           }
 
           if (targetMime === 'image/jpeg') {
-            ctx.fillStyle = '#09090b';
+            ctx.fillStyle = '#ffffff';
             ctx.fillRect(0, 0, width, height);
           }
 

@@ -49,14 +49,19 @@ export const GalleryModal: React.FC<GalleryModalProps> = ({
 
   if (!isOpen || !product) return null;
 
-  const images = product.galleryImages || [product.image];
+  const images = (product.galleryImages && product.galleryImages.length > 0)
+    ? product.galleryImages
+    : [product.image];
+
+  const safeActiveIndex = Math.min(activeIndex, Math.max(0, images.length - 1));
+  const currentImage = images[safeActiveIndex] || product.image;
 
   const prevImage = () => {
-    setActiveIndex((prev) => (prev === 0 ? images.length - 1 : prev - 1));
+    setActiveIndex((prev) => (prev <= 0 ? images.length - 1 : prev - 1));
   };
 
   const nextImage = () => {
-    setActiveIndex((prev) => (prev === images.length - 1 ? 0 : prev + 1));
+    setActiveIndex((prev) => (prev >= images.length - 1 ? 0 : prev + 1));
   };
 
   return (
@@ -65,41 +70,41 @@ export const GalleryModal: React.FC<GalleryModalProps> = ({
       className="fixed inset-0 z-50 bg-black/95 backdrop-blur-2xl flex flex-col justify-between animate-in fade-in duration-300"
     >
       {/* Header */}
-      <div className="flex justify-between items-center px-6 py-5 border-b border-zinc-800/80 bg-zinc-950/70">
+      <div className="flex justify-between items-center px-4 sm:px-6 py-4 sm:py-5 border-b border-zinc-800/80 bg-zinc-950/70">
         <div className="flex items-center gap-3">
           <div>
-            <h2 className="text-white font-serif text-lg tracking-wide flex items-center gap-2">
+            <h2 className="text-white font-serif text-base sm:text-lg tracking-wide flex items-center gap-2">
               <span>{product.name}</span>
-              <span className="text-zinc-500 font-sans text-xs">({product.subname})</span>
+              <span className="text-zinc-500 font-sans text-xs hidden sm:inline">({product.subname})</span>
             </h2>
-            <p className="text-emerald-400 text-xs font-mono mt-0.5">
-              {ANGLE_LABELS[activeIndex] || `รูปมุมมองที่ ${activeIndex + 1}`}
+            <p className="text-emerald-400 text-xs font-mono mt-0.5 truncate max-w-[240px] sm:max-w-none">
+              {ANGLE_LABELS[safeActiveIndex] || `รูปมุมมองที่ ${safeActiveIndex + 1}`}
             </p>
           </div>
           <span className="hidden sm:inline-block px-3 py-1 bg-[#00B900]/15 text-[#00B900] text-[10px] rounded-full font-bold uppercase tracking-widest border border-[#00B900]/30 ml-2">
-            10 Photos Gallery
+            {images.length} Photos Gallery
           </span>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3">
           <button
             onClick={() => {
               onAddToCart(product);
               onClose();
             }}
             disabled={product.stock <= 0}
-            className="hidden sm:flex items-center gap-2 px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-black text-xs font-bold rounded-full transition-all cursor-pointer shadow-[0_0_15px_rgba(0,185,0,0.3)]"
+            className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 sm:py-2 bg-emerald-500 hover:bg-emerald-400 text-black text-xs font-bold rounded-full transition-all cursor-pointer shadow-[0_0_15px_rgba(0,185,0,0.3)] disabled:opacity-50"
           >
             <ShoppingBag className="w-3.5 h-3.5" />
-            <span>สั่งซื้อ ฿{product.price.toLocaleString()}</span>
+            <span>{product.stock <= 0 ? 'หมด' : `สั่งซื้อ ฿${product.price.toLocaleString()}`}</span>
           </button>
 
           <button
             onClick={onClose}
-            className="text-zinc-400 hover:text-white p-2.5 rounded-full bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 transition-colors cursor-pointer"
+            className="text-zinc-400 hover:text-white p-2 sm:p-2.5 rounded-full bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 transition-colors cursor-pointer"
             aria-label="ปิดแกลเลอรี"
           >
-            <X className="w-6 h-6" />
+            <X className="w-5 h-5 sm:w-6 sm:h-6" />
           </button>
         </div>
       </div>
@@ -108,9 +113,14 @@ export const GalleryModal: React.FC<GalleryModalProps> = ({
       <div className="flex-1 relative flex items-center justify-center p-4 sm:p-8 overflow-hidden group/stage">
         <img
           id="gallery-main-img"
-          src={images[activeIndex]}
-          alt={`${product.name} angle ${activeIndex + 1}`}
+          src={currentImage}
+          alt={`${product.name} angle ${safeActiveIndex + 1}`}
           referrerPolicy="no-referrer"
+          onError={(e) => {
+            const target = e.currentTarget;
+            target.onerror = null;
+            target.src = '/images/hero.jpg';
+          }}
           className="max-w-full max-h-[68vh] object-contain rounded-xl shadow-2xl transition-opacity duration-300"
         />
 
@@ -133,7 +143,7 @@ export const GalleryModal: React.FC<GalleryModalProps> = ({
 
         {/* Floating Indicator */}
         <div className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-black/70 backdrop-blur-md px-4 py-1.5 rounded-full border border-white/10 text-xs text-zinc-300 font-mono">
-          {activeIndex + 1} / {images.length}
+          {safeActiveIndex + 1} / {images.length}
         </div>
       </div>
 
@@ -141,7 +151,7 @@ export const GalleryModal: React.FC<GalleryModalProps> = ({
       <div className="h-28 sm:h-32 border-t border-zinc-800/80 bg-zinc-950 flex items-center px-4 sm:px-6 overflow-x-auto">
         <div className="flex gap-2.5 sm:gap-3 mx-auto py-2">
           {images.map((img, idx) => {
-            const isActive = idx === activeIndex;
+            const isActive = idx === safeActiveIndex;
             return (
               <button
                 key={idx}
@@ -156,6 +166,11 @@ export const GalleryModal: React.FC<GalleryModalProps> = ({
                   src={img}
                   alt={`Thumbnail ${idx + 1}`}
                   referrerPolicy="no-referrer"
+                  onError={(e) => {
+                    const target = e.currentTarget;
+                    target.onerror = null;
+                    target.src = '/images/hero.jpg';
+                  }}
                   className="w-full h-full object-cover bg-zinc-900"
                 />
                 <div className="absolute bottom-0 right-0 bg-black/70 px-1.5 py-0.5 text-[9px] text-white font-mono backdrop-blur-sm rounded-tl-md">

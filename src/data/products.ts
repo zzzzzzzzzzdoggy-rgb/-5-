@@ -14,18 +14,11 @@ export const INITIAL_PRODUCTS: Product[] = [
     isBestSeller: false,
     description: 'เซ็ตของขวัญพร้อมตั้งโชว์ (Ready-to-display) บรรจุในถุงกระดาษหน้าต่างใสผูกโบว์สีทองสุดหรู ภายในครบจบ: เปลือกไม้ ขี้เลื่อย อ้อย และเยลลี่ นำไปตั้งโชว์ประดับห้องได้ทันที ดูแลรักษาง่ายเพียงแค่คอยเปลี่ยนอาหาร',
     longDescription: 'กว่างซางเหนือเพศผู้ฟอร์มเขาสั้น (Minor Form) โครงสร้างบึกบึน แข็งแรง ว่องไว อายุยืนยาว จุดเด่นคือจัดมาเป็นเซ็ตของขวัญสำเร็จรูปพร้อมเคสใสโชว์และวัสดุรองพื้นครบชุด เหมาะสำหรับมอบเป็นของขวัญสุดพิเศษหรือตั้งโต๊ะทำงาน เสริมฮวงจุ้ยบารมี',
-    image: '/images/set1.jpg',
+    image: '/images/set1_short_1.jpg',
     galleryImages: [
-      '/images/set1.jpg',
-      '/images/hero.jpg',
-      '/images/set2.jpg',
-      '/images/set3.jpg',
-      'https://images.unsplash.com/photo-1579202673506-ca3ce28943ef?auto=format&fit=crop&w=900&q=80',
-      'https://images.unsplash.com/photo-1588691515518-8f8185c63d59?auto=format&fit=crop&w=900&q=80',
-      'https://images.unsplash.com/photo-1549480017-d76466a4b7e8?auto=format&fit=crop&w=900&q=80',
-      'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=900&q=80',
-      'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=900&q=80',
-      'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=900&q=80'
+      '/images/set1_short_1.jpg',
+      '/images/set1_short_2.jpg',
+      '/images/set1_short_3.jpg'
     ],
     specs: {
       scientificName: 'Eupatorus gracilicornis',
@@ -61,18 +54,12 @@ export const INITIAL_PRODUCTS: Product[] = [
     isBestSeller: true,
     description: 'เกรดคัดพิเศษ เขายาวเรียวสวยงาม ครบ 5 แฉกสมบูรณ์แบบ ไซส์ใหญ่ ฟอร์มประกวด โดดเด่นที่สุด สง่างามสมศักดิ์ศรีราชันย์แห่งขุนเขา',
     longDescription: 'กว่างซางเหนือเพศผู้ฟอร์มเขายาวพิเศษ (Major Form) สุดยอดความภูมิใจของนักสะสมแมลงปีกแข็งระดับประเทศ คัดเฉพาะตัวที่มีเขาหน้าผากยาวโค้งได้องศาได้สัดส่วนทองคำ เขาอกทั้ง 4 แหลมคม ปีกสีเหลืองอำพันเงางามสะท้อนแสงไฟดุจทองคำบริสุทธิ์ ตัวใหญ่ กล้ามเนื้อทรงพลัง',
-    image: '/images/set2.jpg',
+    image: '/images/สั้นยาว ใหญ่.jfif',
     galleryImages: [
-      '/images/set2.jpg',
-      '/images/hero.jpg',
-      '/images/set1.jpg',
-      '/images/set3.jpg',
-      'https://images.unsplash.com/photo-1549480017-d76466a4b7e8?auto=format&fit=crop&w=900&q=80',
-      'https://images.unsplash.com/photo-1579202673506-ca3ce28943ef?auto=format&fit=crop&w=900&q=80',
-      'https://images.unsplash.com/photo-1588691515518-8f8185c63d59?auto=format&fit=crop&w=900&q=80',
-      'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=900&q=80',
-      'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=900&q=80',
-      'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=900&q=80'
+      '/images/สั้นยาว ใหญ่.jfif',
+      '/images/Gemini_Generated_Image_9px4ih9px4ih9px4.jfif',
+      '/images/ยาว3.jfif',
+      '/images/ยาว4.jfif'
     ],
     specs: {
       scientificName: 'Eupatorus gracilicornis',

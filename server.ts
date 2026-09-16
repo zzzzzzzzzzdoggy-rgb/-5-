@@ -122,8 +122,8 @@ const defaultProducts: ProductData[] = [
     isBestSeller: false,
     description: 'เซ็ตของขวัญพร้อมตั้งโชว์ (Ready-to-display) บรรจุในถุงกระดาษหน้าต่างใสผูกโบว์สีทองสุดหรู ภายในครบจบ: เปลือกไม้ ขี้เลื่อย อ้อย และเยลลี่ นำไปตั้งโชว์ประดับห้องได้ทันที ดูแลรักษาง่ายเพียงแค่คอยเปลี่ยนอาหาร',
     longDescription: 'กว่างซางเหนือเพศผู้ฟอร์มเขาสั้น (Minor Form) โครงสร้างบึกบึน แข็งแรง ว่องไว อายุยืนยาว จุดเด่นคือจัดมาเป็นเซ็ตของขวัญสำเร็จรูปพร้อมเคสใสโชว์และวัสดุรองพื้นครบชุด',
-    image: '/images/set1.jpg',
-    galleryImages: ['/images/set1.jpg', '/images/hero.jpg', '/images/set2.jpg', '/images/set3.jpg']
+    image: '/images/set1_short_1.jpg',
+    galleryImages: ['/images/set1_short_1.jpg', '/images/set1_short_2.jpg', '/images/set1_short_3.jpg']
   },
   {
     id: 'set-2',
@@ -138,8 +138,13 @@ const defaultProducts: ProductData[] = [
     isBestSeller: true,
     description: 'เกรดคัดพิเศษ เขายาวเรียวสวยงาม ครบ 5 แฉกสมบูรณ์แบบ ไซส์ใหญ่ ฟอร์มประกวด โดดเด่นที่สุด สง่างามสมศักดิ์ศรีราชันย์แห่งขุนเขา',
     longDescription: 'กว่างซางเหนือเพศผู้ฟอร์มเขายาวพิเศษ (Major Form) สุดยอดความภูมิใจของนักสะสมแมลงปีกแข็งระดับประเทศ คัดเฉพาะตัวที่มีเขาหน้าผากยาวโค้งได้องศาได้สัดส่วนทองคำ',
-    image: '/images/set2.jpg',
-    galleryImages: ['/images/set2.jpg', '/images/hero.jpg', '/images/set1.jpg', '/images/set3.jpg']
+    image: '/images/สั้นยาว ใหญ่.jfif',
+    galleryImages: [
+      '/images/สั้นยาว ใหญ่.jfif',
+      '/images/Gemini_Generated_Image_9px4ih9px4ih9px4.jfif',
+      '/images/ยาว3.jfif',
+      '/images/ยาว4.jfif'
+    ]
   },
   {
     id: 'set-3',
@@ -216,6 +221,23 @@ async function startServer() {
   const staticUploadOptions = { maxAge: "30d", etag: true };
   app.use("/uploads", express.static(UPLOADS_DIR, staticUploadOptions));
   app.use("/public/uploads", express.static(UPLOADS_DIR, staticUploadOptions));
+
+  // Static images directory supporting all image formats including .jfif, .webp, .jpg, .png
+  const IMAGES_DIR = path.join(process.cwd(), "public", "images");
+  if (fs.existsSync(IMAGES_DIR)) {
+    app.use(
+      "/images",
+      express.static(IMAGES_DIR, {
+        maxAge: "30d",
+        etag: true,
+        setHeaders: (res, filePath) => {
+          if (filePath.endsWith(".jfif")) {
+            res.setHeader("Content-Type", "image/jpeg");
+          }
+        },
+      })
+    );
+  }
 
   // Helper for saving an image buffer to disk asynchronously
   async function saveBase64Image(image: string, name?: string): Promise<{ url: string; filename: string; size: number }> {
@@ -351,7 +373,7 @@ async function startServer() {
   });
 
   // Admin update product stock, gallery images, details
-  app.post("/api/products/update", (req, res) => {
+  app.post("/api/products/update", async (req, res) => {
     const {
       id,
       stock,
@@ -383,10 +405,40 @@ async function startServer() {
     if (isBestSeller !== undefined) products[index].isBestSeller = Boolean(isBestSeller);
     if (description !== undefined) products[index].description = description;
     if (longDescription !== undefined) products[index].longDescription = longDescription;
-    if (image !== undefined) products[index].image = image;
-    if (galleryImages !== undefined && Array.isArray(galleryImages)) {
-      products[index].galleryImages = galleryImages;
+    
+    // Auto-persist cover image to disk if sent as base64
+    if (image !== undefined) {
+      if (typeof image === "string" && image.startsWith("data:image/")) {
+        try {
+          const saved = await saveBase64Image(image, `${id}-cover`);
+          products[index].image = saved.url;
+        } catch (e) {
+          products[index].image = image;
+        }
+      } else {
+        products[index].image = image;
+      }
     }
+
+    // Auto-persist gallery images to disk if sent as base64
+    if (galleryImages !== undefined && Array.isArray(galleryImages)) {
+      const persistedGallery: string[] = [];
+      for (let i = 0; i < galleryImages.length; i++) {
+        const gImg = galleryImages[i];
+        if (typeof gImg === "string" && gImg.startsWith("data:image/")) {
+          try {
+            const saved = await saveBase64Image(gImg, `${id}-gallery-${i}`);
+            persistedGallery.push(saved.url);
+          } catch (e) {
+            persistedGallery.push(gImg);
+          }
+        } else {
+          persistedGallery.push(gImg);
+        }
+      }
+      products[index].galleryImages = persistedGallery;
+    }
+
     if (specs !== undefined) products[index].specs = { ...products[index].specs, ...specs };
     if (inBoxIncludes !== undefined && Array.isArray(inBoxIncludes)) {
       products[index].inBoxIncludes = inBoxIncludes;
@@ -412,7 +464,7 @@ async function startServer() {
   });
 
   // Place order & atomically decrement stock
-  app.post("/api/orders", (req, res) => {
+  app.post("/api/orders", async (req, res) => {
     const {
       customerName,
       customerPhone,
@@ -458,6 +510,17 @@ async function startServer() {
     }
     saveProducts(products);
 
+    // Auto-save slip to permanent disk if provided as base64
+    let savedSlipUrl = slipImage;
+    if (slipImage && typeof slipImage === "string" && slipImage.startsWith("data:image/")) {
+      try {
+        const saved = await saveBase64Image(slipImage, `slip-${Date.now()}`);
+        savedSlipUrl = saved.url;
+      } catch (slipErr) {
+        console.warn("[Orders] Slip image save error, keeping data as-is:", slipErr);
+      }
+    }
+
     // Create order record
     const newOrder: OrderData = {
       id: `EUP-${Date.now().toString().slice(-6)}-${Math.floor(100 + Math.random() * 900)}`,
@@ -473,8 +536,8 @@ async function startServer() {
       shippingFee: shippingFee || 0,
       totalAmount: totalAmount || 0,
       couponCode,
-      slipImage,
-      status: slipImage ? 'paid_verified' : (paymentMethod === 'line' ? 'pending_payment' : 'paid_verified')
+      slipImage: savedSlipUrl,
+      status: savedSlipUrl ? 'paid_verified' : (paymentMethod === 'line' ? 'pending_payment' : 'paid_verified')
     };
 
     orders.unshift(newOrder);

@@ -54,10 +54,17 @@ export const AdminModal: React.FC<AdminModalProps> = ({
   visitorCount,
 }) => {
   const [activeTab, setActiveTab] = useState<'media' | 'stock' | 'orders'>('media');
-  const [selectedProductId, setSelectedProductId] = useState<string>('');
+  const [selectedProductId, setSelectedProductId] = useState<string>(
+    initialProductId || (products.length > 0 ? products[0].id : 'set-1')
+  );
 
-  // Selected product edit state
-  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  // Selected product edit state (instant fallback to prevent any null-render blank screens)
+  const [editingProduct, setEditingProduct] = useState<Product | null>(() => {
+    if (products.length === 0) return null;
+    const target = initialProductId ? products.find((p) => p.id === initialProductId) : null;
+    return target ? JSON.parse(JSON.stringify(target)) : JSON.parse(JSON.stringify(products[0]));
+  });
+
   const [newImageUrl, setNewImageUrl] = useState('');
   const [newInBoxItem, setNewInBoxItem] = useState('');
   const [isUploading, setIsUploading] = useState(false);
@@ -79,33 +86,62 @@ export const AdminModal: React.FC<AdminModalProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const coverFileInputRef = useRef<HTMLInputElement>(null);
 
+  const prevIsOpenRef = useRef(false);
+  const lastInitialProductIdRef = useRef<string | undefined>(undefined);
+
+  // Safely computed active product fallback
+  const activeProduct: Product | null =
+    editingProduct ||
+    products.find((p) => p.id === selectedProductId) ||
+    (initialProductId ? products.find((p) => p.id === initialProductId) : null) ||
+    products[0] ||
+    null;
+
   // Initialize selected product and stock edits
   useEffect(() => {
-    if (!isOpen || products.length === 0) return;
+    if (!isOpen || products.length === 0) {
+      prevIsOpenRef.current = isOpen;
+      return;
+    }
+
+    const isFirstOpen = !prevIsOpenRef.current && isOpen;
+    const isInitialProductChanged =
+      initialProductId !== undefined && initialProductId !== lastInitialProductIdRef.current;
+
+    prevIsOpenRef.current = isOpen;
+    lastInitialProductIdRef.current = initialProductId;
 
     if (initialProductId) {
       setActiveTab('media');
     }
 
-    const targetId = initialProductId && products.some((p) => p.id === initialProductId)
-      ? initialProductId
-      : (selectedProductId && products.some((p) => p.id === selectedProductId))
-      ? selectedProductId
-      : products[0].id;
+    // Only force overwrite editingProduct if first opened, initialProductId changed, or editingProduct is null
+    if (isFirstOpen || isInitialProductChanged || !editingProduct) {
+      const targetId =
+        initialProductId && products.some((p) => p.id === initialProductId)
+          ? initialProductId
+          : selectedProductId && products.some((p) => p.id === selectedProductId)
+          ? selectedProductId
+          : products[0].id;
 
-    setSelectedProductId(targetId);
-    const prod = products.find((p) => p.id === targetId) || products[0];
-    setEditingProduct(JSON.parse(JSON.stringify(prod)));
+      setSelectedProductId(targetId);
+      const prod = products.find((p) => p.id === targetId) || products[0];
+      setEditingProduct(JSON.parse(JSON.stringify(prod)));
+    }
 
-    const initialStock: Record<string, { stock: number; price: number; originalPrice: number }> = {};
-    products.forEach((p) => {
-      initialStock[p.id] = {
-        stock: p.stock,
-        price: p.price,
-        originalPrice: p.originalPrice,
-      };
+    // Initialize stock edits
+    setStockEdits((prev) => {
+      if (Object.keys(prev).length > 0 && !isFirstOpen) return prev;
+      const initialStock: Record<string, { stock: number; price: number; originalPrice: number }> = {};
+      products.forEach((p) => {
+        initialStock[p.id] = {
+          stock: p.stock,
+          price: p.price,
+          originalPrice: p.originalPrice,
+        };
+      });
+      return initialStock;
     });
-    setStockEdits(initialStock);
   }, [isOpen, initialProductId, products]);
 
   // Load orders when modal opens or when switching to orders tab
@@ -187,13 +223,26 @@ export const AdminModal: React.FC<AdminModalProps> = ({
 
   // --- Professional High-Speed Image Management Handlers ---
 
-  // Direct Cover Image Upload Handler (Ultra-Fast GPU Optimization)
+  // Direct Cover Image Upload Handler (Ultra-Fast GPU Optimization with Instant Preview)
   const handleCoverUpload = async (file: File | null) => {
     const currentProduct = editingProduct || products.find((p) => p.id === selectedProductId) || products[0];
     if (!file || !currentProduct) {
       if (!currentProduct) showNotify('กรุณาเลือกสินค้าก่อนทำการอัปโหลดภาพ', 'error');
       return;
     }
+
+    // 0ms instant optimistic preview
+    const instantUrl = URL.createObjectURL(file);
+    const existingGallery = currentProduct.galleryImages || [];
+    const optimisticGallery = existingGallery.includes(instantUrl)
+      ? existingGallery
+      : [instantUrl, ...existingGallery];
+
+    setEditingProduct({
+      ...currentProduct,
+      image: instantUrl,
+      galleryImages: optimisticGallery,
+    });
 
     setIsUploading(true);
     setUploadProgress({ current: 1, total: 1, stage: '⚡ กำลังประมวลผลรูปหน้าปกแบบความเร็วสูง...' });
@@ -230,11 +279,11 @@ export const AdminModal: React.FC<AdminModalProps> = ({
         savedUrl = opt.base64;
       }
 
-      // Add to gallery if not exists
-      const existingGallery = currentProduct.galleryImages || [];
-      const updatedGallery = existingGallery.includes(savedUrl)
-        ? existingGallery
-        : [savedUrl, ...existingGallery];
+      // Add to gallery if not exists (replacing instantUrl if present)
+      const cleanedGallery = optimisticGallery.filter((u) => u !== instantUrl);
+      const updatedGallery = cleanedGallery.includes(savedUrl)
+        ? cleanedGallery
+        : [savedUrl, ...cleanedGallery];
 
       const updatedProduct: Product = {
         ...currentProduct,
@@ -266,6 +315,14 @@ export const AdminModal: React.FC<AdminModalProps> = ({
 
     const fileList = Array.from(files);
     const totalFiles = fileList.length;
+
+    // 0ms instant optimistic preview for all files
+    const instantUrls = fileList.map((f) => URL.createObjectURL(f));
+    const initialExistingGallery = currentProduct.galleryImages || [];
+    setEditingProduct({
+      ...currentProduct,
+      galleryImages: [...initialExistingGallery, ...instantUrls],
+    });
 
     setIsUploading(true);
     setUploadProgress({ current: 0, total: totalFiles, stage: `⚡ เริ่มประมวลผล ${totalFiles} รูปแบบความเร็วสูง (Parallel Engine)...` });
@@ -386,11 +443,19 @@ export const AdminModal: React.FC<AdminModalProps> = ({
       // Clean valid URLs
       const validUrls = uploadedUrls.filter(Boolean);
 
-      // Add newly uploaded images to galleryImages
-      const existingGallery = currentProduct.galleryImages || [];
-      const updatedGallery = [...existingGallery, ...validUrls];
-      // If no main cover image exists, set first uploaded as cover
-      const updatedCover = currentProduct.image || validUrls[0];
+      // Filter out any temporary optimistic blob: URLs before persisting to database
+      const cleanedExistingGallery = (currentProduct.galleryImages || []).filter((u) => !u.startsWith('blob:'));
+      const updatedGallery = [...cleanedExistingGallery];
+      validUrls.forEach((url) => {
+        if (url && !updatedGallery.includes(url) && !url.startsWith('blob:')) {
+          updatedGallery.push(url);
+        }
+      });
+
+      // If no valid cover image exists or cover is a blob, set first uploaded as cover
+      const updatedCover = (currentProduct.image && !currentProduct.image.startsWith('blob:'))
+        ? currentProduct.image
+        : (validUrls[0] || currentProduct.image);
 
       const updatedProduct: Product = {
         ...currentProduct,
@@ -835,8 +900,34 @@ export const AdminModal: React.FC<AdminModalProps> = ({
         {/* ========================================================
             TAB 1: PRO MEDIA & PRODUCT EDITOR (แก้ไข เพิ่มรูป ลบรูป)
            ======================================================== */}
-        {activeTab === 'media' && editingProduct && (
-          <div className="space-y-8 flex-1">
+        {activeTab === 'media' && (
+          !activeProduct ? (
+            <div className="py-20 flex flex-col items-center justify-center text-center space-y-3 bg-zinc-900/40 rounded-3xl border border-zinc-800">
+              <RefreshCw className="w-8 h-8 text-emerald-400 animate-spin" />
+              <p className="text-zinc-300 text-sm font-medium">กำลังเตรียมระบบจัดการรูปภาพและข้อมูลสินค้า...</p>
+              <p className="text-zinc-500 text-xs">หากรอนาน กรุณากดปุ่มรีเฟรชข้อมูลด้านบน</p>
+            </div>
+          ) : (
+          <div
+            className="space-y-8 flex-1"
+            onPaste={(e) => {
+              const items = e.clipboardData?.items;
+              if (!items) return;
+              const files: File[] = [];
+              for (let i = 0; i < items.length; i++) {
+                if (items[i].type.indexOf('image') !== -1) {
+                  const f = items[i].getAsFile();
+                  if (f) files.push(f);
+                }
+              }
+              if (files.length > 0) {
+                e.preventDefault();
+                const dt = new DataTransfer();
+                files.forEach((f) => dt.items.add(f));
+                handleFileUpload(dt.files);
+              }
+            }}
+          >
             
             {/* Product Selector Pills */}
             <div>
@@ -845,7 +936,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
               </label>
               <div className="grid grid-cols-3 gap-2.5">
                 {products.map((p) => {
-                  const isSelected = p.id === selectedProductId;
+                  const isSelected = p.id === (editingProduct?.id || activeProduct.id);
                   return (
                     <button
                       key={p.id}
@@ -883,7 +974,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                     <span>ระบบจัดการรูปภาพระดับโปร (Media & Gallery Manager)</span>
                   </h3>
                   <p className="text-zinc-400 text-xs mt-0.5">
-                    มีภาพทั้งหมด <strong className="text-white">{editingProduct.galleryImages?.length || 0} รูป</strong> • แนะนำ 8-10 รูปเพื่อแสดงผลในแกลเลอรี 10 มุมมองได้อย่างสมบูรณ์แบบ
+                    มีภาพทั้งหมด <strong className="text-white">{(editingProduct || activeProduct).galleryImages?.length || 0} รูป</strong> • แนะนำ 8-10 รูปเพื่อแสดงผลในแกลเลอรี 10 มุมมองได้อย่างสมบูรณ์แบบ
                   </p>
                 </div>
 
@@ -894,6 +985,9 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                     ref={coverFileInputRef}
                     accept="image/png,image/jpeg,image/webp,image/gif,image/*"
                     className="hidden"
+                    onClick={(e) => {
+                      (e.target as HTMLInputElement).value = '';
+                    }}
                     onChange={(e) => {
                       if (e.target.files && e.target.files[0]) {
                         handleCoverUpload(e.target.files[0]);
@@ -906,6 +1000,9 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                     accept="image/png,image/jpeg,image/webp,image/gif,image/*"
                     multiple
                     className="hidden"
+                    onClick={(e) => {
+                      (e.target as HTMLInputElement).value = '';
+                    }}
                     onChange={(e) => handleFileUpload(e.target.files)}
                   />
                   <button
@@ -1328,6 +1425,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
             </div>
 
           </div>
+          )
         )}
 
         {/* ========================================================
@@ -1511,6 +1609,47 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                       </div>
                     ))}
                   </div>
+
+                  {/* Customer Transfer Slip Evidence (if uploaded) */}
+                  {order.slipImage && (
+                    <div className="p-3 rounded-xl bg-zinc-950 border border-emerald-500/30 flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div
+                          onClick={() => setPreviewZoomImage(order.slipImage || null)}
+                          className="relative w-14 h-14 rounded-lg overflow-hidden border border-emerald-500/50 bg-black flex-shrink-0 cursor-pointer group shadow-sm"
+                          title="คลิกเพื่อดูสลิปขนาดเต็ม"
+                        >
+                          <img
+                            src={order.slipImage}
+                            alt="Slip Evidence"
+                            referrerPolicy="no-referrer"
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                          />
+                          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white">
+                            <ZoomIn className="w-4 h-4" />
+                          </div>
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5 text-emerald-400 text-xs font-semibold">
+                            <CheckCircle className="w-3.5 h-3.5" />
+                            <span>แนบสลิปหลักฐานการโอนแล้ว</span>
+                          </div>
+                          <p className="text-[11px] text-zinc-400 mt-0.5">
+                            คลิกที่รูปเพื่อขยายตรวจสอบยอดเงินและบัญชี
+                          </p>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => setPreviewZoomImage(order.slipImage || null)}
+                        className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer flex-shrink-0"
+                      >
+                        <Eye className="w-3.5 h-3.5 text-emerald-400" />
+                        <span>ดูสลิปเต็มจอ</span>
+                      </button>
+                    </div>
+                  )}
 
                   {/* Status update & Delete Button */}
                   <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-zinc-800/60">
