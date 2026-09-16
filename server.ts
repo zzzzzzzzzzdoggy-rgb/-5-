@@ -122,8 +122,15 @@ const defaultProducts: ProductData[] = [
     isBestSeller: false,
     description: 'เซ็ตของขวัญพร้อมตั้งโชว์ (Ready-to-display) บรรจุในถุงกระดาษหน้าต่างใสผูกโบว์สีทองสุดหรู ภายในครบจบ: เปลือกไม้ ขี้เลื่อย อ้อย และเยลลี่ นำไปตั้งโชว์ประดับห้องได้ทันที ดูแลรักษาง่ายเพียงแค่คอยเปลี่ยนอาหาร',
     longDescription: 'กว่างซางเหนือเพศผู้ฟอร์มเขาสั้น (Minor Form) โครงสร้างบึกบึน แข็งแรง ว่องไว อายุยืนยาว จุดเด่นคือจัดมาเป็นเซ็ตของขวัญสำเร็จรูปพร้อมเคสใสโชว์และวัสดุรองพื้นครบชุด',
-    image: '/images/set1_short_1.jpg',
-    galleryImages: ['/images/set1_short_1.jpg', '/images/set1_short_2.jpg', '/images/set1_short_3.jpg']
+    image: '/images/user_upload_set1_1.jpg',
+    galleryImages: [
+      '/images/user_upload_set1_1.jpg',
+      '/images/user_upload_set1_2.jpg',
+      '/images/user_upload_set1_3.jpg',
+      '/images/set1_short_1.jpg',
+      '/images/set1_short_2.jpg',
+      '/images/set1_short_3.jpg'
+    ]
   },
   {
     id: 'set-2',
@@ -138,8 +145,12 @@ const defaultProducts: ProductData[] = [
     isBestSeller: true,
     description: 'เกรดคัดพิเศษ เขายาวเรียวสวยงาม ครบ 5 แฉกสมบูรณ์แบบ ไซส์ใหญ่ ฟอร์มประกวด โดดเด่นที่สุด สง่างามสมศักดิ์ศรีราชันย์แห่งขุนเขา',
     longDescription: 'กว่างซางเหนือเพศผู้ฟอร์มเขายาวพิเศษ (Major Form) สุดยอดความภูมิใจของนักสะสมแมลงปีกแข็งระดับประเทศ คัดเฉพาะตัวที่มีเขาหน้าผากยาวโค้งได้องศาได้สัดส่วนทองคำ',
-    image: '/images/สั้นยาว ใหญ่.jfif',
+    image: '/images/user_upload_set2_1.jpg',
     galleryImages: [
+      '/images/user_upload_set2_1.jpg',
+      '/images/user_upload_set2_2.jpg',
+      '/images/user_upload_set2_3.jpg',
+      '/images/user_upload_set2_4.jpg',
       '/images/สั้นยาว ใหญ่.jfif',
       '/images/Gemini_Generated_Image_9px4ih9px4ih9px4.jfif',
       '/images/ยาว3.jfif',
